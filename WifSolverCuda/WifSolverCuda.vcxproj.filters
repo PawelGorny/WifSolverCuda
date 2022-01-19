@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CudaCompile Include="main.cu" />
+    <CudaCompile Include="Worker1.cu" />
+    <CudaCompile Include="lib\hash\sha256.cu" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="lib">
+      <UniqueIdentifier>{a3ba1744-4558-4f43-929d-257a130b100e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="lib\hash">
+      <UniqueIdentifier>{ead5e527-2aba-45b9-9db3-0b21f933c6d2}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Worker.cuh" />
+    <ClInclude Include="lib\hash\ripemd160.h" />
+    <ClInclude Include="lib\hash\sha256.h" />
+    <ClInclude Include="lib\Int.h" />
+    <ClInclude Include="lib\IntGroup.h" />
+    <ClInclude Include="lib\Math.cuh" />
+    <ClInclude Include="lib\Point.h" />
+    <ClInclude Include="lib\SECP256k1.h" />
+    <ClInclude Include="lib\util.h" />
+    <ClInclude Include="lib\base58.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="lib\hash\ripemd160.cpp" />
+    <ClCompile Include="lib\hash\ripemd160_sse.cpp" />
+    <ClCompile Include="lib\hash\sha256.cpp" />
+    <ClCompile Include="lib\hash\sha256_sse.cpp" />
+    <ClCompile Include="lib\Int.cpp" />
+    <ClCompile Include="lib\IntGroup.cpp" />
+    <ClCompile Include="lib\IntMod.cpp" />
+    <ClCompile Include="lib\Point.cpp" />
+    <ClCompile Include="lib\SECP256K1.cpp" />
+    <ClCompile Include="lib\util.cpp" />
+    <ClCompile Include="lib\base58.c" />
+  </ItemGroup>
+</Project>
