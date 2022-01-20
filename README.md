@@ -13,6 +13,7 @@ Usage:
      -fresult resultFile: file for final result (default: result.txt)
      -fresultp reportFile: file for each WIF with correct checksum (default: result_partial.txt)
      -fstatus statusFile: file for periodically saved status (default: fileStatus.txt)
+     -checksum hexChecksum: decoded checksum, cannot be modified with a stride
      -c search for compressed address
      -u search for uncompressed address (default)
      -d deviceId: default 0
