@@ -13,14 +13,16 @@ Usage:
      -fresult resultFile: file for final result (default: result.txt)
      -fresultp reportFile: file for each WIF with correct checksum (default: result_partial.txt)
      -fstatus statusFile: file for periodically saved status (default: fileStatus.txt)
+     -c search for compressed address
+     -u search for uncompressed address (default)
      -d deviceId: default 0
      -b NbBlocks: default processorCount * 12
      -t NbThreads: default deviceMax / 4
      -s NbThreadChecks: default 3364
      -a targetAddress: expected address
      
-Currently program supports only the case of uncompressed WIF with missing characters in the middle.
-Support for compressed WIF and characters missing on the beginning will be added very soon.
+Currently program supports only the case of compressed or uncompressed WIF with missing characters in the middle.
+Support for WIFs with characters missing on the beginning will be added very soon.
 
 Program could search for given address or search for any valid WIF with a given configuration. 
  
@@ -45,9 +47,14 @@ In our case the first missing character is on 9th position from right side, so o
 
 We may launch program with parameters:
 
-    -stride 7479027ea100 -rangeStart 80c59cb0997ad73f7bf8621b1955caf80b304ded0a48e5b8f28c7b89f466ff5f68e2677283  -a 19NzcPZvZMSNQk8sDbSiyjeKpEVpaS1212
+    -stride 7479027ea100 -u -rangeStart 80c59cb0997ad73f7bf8621b1955caf80b304ded0a48e5b8f28c7b89f466ff5f68e2677283  -a 19NzcPZvZMSNQk8sDbSiyjeKpEVpaS1212
 
 Solver for described example is based on fact that stride modifies decoded checksum. Program verifies checksum (2*sha256) and only valid WIFs are checked agains expected address (pubkey->hashes->address).
+    
+Similar test for compressed WIF (target _KzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzWK7YY3s_):
+
+    -stride 7479027ea100 -c -rangeStart 8070cfa0d40309798a5bd144a396478b5b5ae3305b7413601b18767654f1108a02787692623a  -a 1PzaLTZS3J3HqGfsa8Z2jfkCT1QpSMVunD
+
     
 For WIFs where stride does not collide with checksum, other algorithm will be needed.
         
@@ -58,13 +65,14 @@ Program was prepared using CUDA 11.6 - for other version manual change in VS pro
 Performance
 -----------
 One's must modify number of blocks and number of threads in each block to find the ones which are the best for his card. Number of test performed by each thread also could have impact of global performance/latency.  
-Example: RTX3060 (-b 224 -t 512 -s 3364) checks around 1000Mkey/s. Example above extended to 7 missing characters was solved in 12 minutes (starting key: 80c59cb0997ad73f7bf8621b1955caf80b304ded0a48e5b8f28c31b30a90d68ffcabd9b283).
+Example: RTX3060 (-b 224 -t 512 -s 3364) checks around 1000Mkey/s for uncompressed address and around 2100 MKey/s for compressed address. 
+Example above extended to 7 missing characters was solved in 12 minutes (uncompressed starting key: 80c59cb0997ad73f7bf8621b1955caf80b304ded0a48e5b8f28c31b30a90d68ffcabd9b283).
+
        
 TODO
 ----
 * code cleaning, review of hash functions
 * build configuration for Linux
-* support for compressed address
-* solver for missing characters at the right side (with expected checksum)
-* predefined step (using list of possible characters)
+* solver for missing characters at the left side (with a known expected checksum)
+* predefined custom step (using list of possible characters)
 * reading configuration from file
