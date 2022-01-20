@@ -75,3 +75,10 @@ TODO
 * predefined custom step (using list of possible characters)
 * reading configuration from file
 * build-in stride calculcater
+
+
+Contact
+-------
+Contact email: pawgo@protonmail.com
+If you found this program useful, consider making a donation, I will appreciate it! 
+**BTC**: `34dEiyShGJcnGAg2jWhcoDDRxpennSZxg8`
