@@ -44,7 +44,7 @@ bool IS_CHECKSUM = false;
 
 bool RESULT = false;
 bool useCollector = false;
-uint64_t collectorLimit = 100000000;
+uint64_t collectorLimit = 100;
 
 uint64_t outputSize;
 
@@ -57,7 +57,7 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.3\n\n");
+    printf("WifSolver 0.3.1\n\n");
 
     if (readArgs(argc, argv)) {
         showHelp(); 
