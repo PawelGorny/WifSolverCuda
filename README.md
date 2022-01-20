@@ -64,15 +64,13 @@ Program was prepared using CUDA 11.6 - for other version manual change in VS pro
 Performance
 -----------
 One's must modify number of blocks and number of threads in each block to find the ones which are the best for his card. Number of test performed by each thread also could have impact of global performance/latency.  
-Test card: RTX3060 (-b 224 -t 512 -s 3364) checks around 1000Mkey/s for uncompressed address and around 2100 MKey/s for compressed address. 
-Example above extended to 7 missing characters was solved in 12 minutes (uncompressed starting key: 80c59cb0997ad73f7bf8621b1955caf80b304ded0a48e5b8f28c31b30a90d68ffcabd9b283); work done = 19 * 6 missing characters.
-With the same configuration of the card but for compressed address, the full range of 7 missing characters was solved in 18 minutes (compressed starting key: 8070cfa0d40309798a5bd144a396478b5b5ae3305b7413601b18758c81b73fb371a1c9d1823a).
+Test card: RTX3060 (-b 224 -t 512 -s 3364) checks around 3600 MKey/s for compressed address with missing characters in the middle and around 1300Mkey/s for other cases.
 
        
 TODO
 ----
 * code cleaning, review of hash functions
 * build configuration for Linux
-* solver for missing characters at the left side (with a known expected checksum)
 * predefined custom step (using list of possible characters)
 * reading configuration from file
+* build-in stride calculcater

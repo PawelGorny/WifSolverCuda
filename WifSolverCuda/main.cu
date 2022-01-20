@@ -38,6 +38,9 @@ Int STRIDE, RANGE_START, RANGE_END;
 Int loopStride;
 Int counter;
 string TARGET_ADDRESS = "";
+Int CHECKSUM;
+bool IS_CHECKSUM = false;
+
 
 bool RESULT = false;
 bool useCollector = false;
@@ -54,7 +57,7 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.2\n\n");
+    printf("WifSolver 0.3\n\n");
 
     if (readArgs(argc, argv)) {
         showHelp(); 
@@ -101,8 +104,8 @@ cudaError_t processCuda() {
 
     cudaStatus = cudaMalloc((void**)&dev_buffRangeStart, NB64BLOCK * sizeof(uint64_t));
     cudaStatus = cudaMalloc((void**)&dev_buffStride, NB64BLOCK * sizeof(uint64_t));
-    cudaStatus = cudaMemcpy(dev_buffStride, buffStride, NB64BLOCK * sizeof(uint64_t), cudaMemcpyHostToDevice);
-    
+    cudaStatus = cudaMemcpy(dev_buffStride, buffStride, NB64BLOCK * sizeof(uint64_t), cudaMemcpyHostToDevice);      
+
     bool* buffDeviceResult = new bool[outputSize];
     bool* dev_buffDeviceResult = new bool[outputSize];
     cudaStatus = cudaMalloc((void**)&dev_buffDeviceResult, outputSize * sizeof(bool));
@@ -114,11 +117,19 @@ cudaError_t processCuda() {
     cudaStatus = cudaMalloc((void**)&dev_buffResult, COLLECTOR_SIZE * sizeof(uint64_t));
     cudaStatus = cudaMemcpy(dev_buffResult, buffResult, COLLECTOR_SIZE * sizeof(uint64_t), cudaMemcpyHostToDevice);
 
+    bool* buffCollectorWork = new bool[1];
+    buffCollectorWork[0] = false;
+    bool* dev_buffCollectorWork = new bool[1];
+    cudaStatus = cudaMalloc((void**)&dev_buffCollectorWork, 1 * sizeof(bool));
+    cudaStatus = cudaMemcpy(dev_buffCollectorWork, buffCollectorWork, 1 * sizeof(bool), cudaMemcpyHostToDevice);
+
+    const uint32_t expectedChecksum = IS_CHECKSUM ? CHECKSUM.GetInt32() : 0;
+
     uint64_t counter = 0;
     int counterSaveFile = 0;
         
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
-
+    
     while (!RESULT && RANGE_START.IsLower(&RANGE_END)) {
 
         //prepare launch
@@ -126,10 +137,19 @@ cudaError_t processCuda() {
         cudaStatus = cudaMemcpy(dev_buffRangeStart, buffRangeStart, NB64BLOCK * sizeof(uint64_t), cudaMemcpyHostToDevice);
         //launch work
         if (COMPRESSED) {
-            kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (dev_buffDeviceResult, dev_buffRangeStart, dev_buffStride, THREAD_STEPS);
+            if (IS_CHECKSUM) {
+                kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (dev_buffDeviceResult, dev_buffCollectorWork, dev_buffRangeStart, dev_buffStride, THREAD_STEPS, expectedChecksum);
+            }else{
+                kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (dev_buffDeviceResult, dev_buffCollectorWork, dev_buffRangeStart, dev_buffStride, THREAD_STEPS);
+            }            
         }
         else {            
-            kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (dev_buffDeviceResult, dev_buffRangeStart, dev_buffStride, THREAD_STEPS);
+            if (IS_CHECKSUM) {
+                kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (dev_buffDeviceResult, dev_buffCollectorWork, dev_buffRangeStart, dev_buffStride, THREAD_STEPS, expectedChecksum);
+            }else{
+                kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (dev_buffDeviceResult, dev_buffCollectorWork, dev_buffRangeStart, dev_buffStride, THREAD_STEPS);
+            }
+            
         }        
         cudaStatus = cudaGetLastError();
         if (cudaStatus != cudaSuccess) {
@@ -144,8 +164,11 @@ cudaError_t processCuda() {
         //std::cout << "Time difference = " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count() << "[ms]" << std::endl;
 
         if (useCollector) {
-            //summarize results
-            bool anyResult = true;
+            //summarize results            
+            cudaStatus = cudaMemcpy(buffCollectorWork, dev_buffCollectorWork, 1 * sizeof(bool), cudaMemcpyDeviceToHost);
+            bool anyResult = buffCollectorWork[0];
+            buffCollectorWork[0] = false;
+            cudaStatus = cudaMemcpy(dev_buffCollectorWork, buffCollectorWork, 1 * sizeof(bool), cudaMemcpyHostToDevice);
             while (anyResult) {
                 resultCollector << <BLOCK_NUMBER, 1 >> > (dev_buffDeviceResult, dev_buffResult, THREAD_STEPS * BLOCK_THREADS);
                 cudaStatus = cudaGetLastError();
@@ -196,7 +219,7 @@ cudaError_t processCuda() {
         //std::cout << "Time difference = " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count() << "[ms]" << std::endl;        
         RANGE_START.Add(&loopStride);
         counter += outputSize;
-        int32_t t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count();
+        uint64_t t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count();
         if ( t > 5000) {
             double speed = (double)((double)counter / (t/1000) ) / 1000000.0;            
             std::string speedStr;
@@ -229,6 +252,7 @@ Error:
     cudaFree(dev_buffDeviceResult);
     cudaFree(dev_buffRangeStart);
     cudaFree(dev_buffStride);
+    cudaFree(dev_buffCollectorWork);
     return cudaStatus;
 }
 
@@ -268,8 +292,8 @@ void processCandidate(Int &toTest) {
 
 void printConfig() {
     printf("Range start: %s\n", RANGE_START.GetBase16().c_str());
-    printf( "Range end  : %s\n", RANGE_END.GetBase16().c_str());
-    printf( "Stride     : %s\n", STRIDE.GetBase16().c_str());
+    printf("Range end  : %s\n", RANGE_END.GetBase16().c_str());
+    printf("Stride     : %s\n", STRIDE.GetBase16().c_str());
     if (!TARGET_ADDRESS.empty()) {
         printf( "Target     : %s\n", TARGET_ADDRESS.c_str());
     }
@@ -277,6 +301,9 @@ void printConfig() {
         printf("Target COMPRESSED\n");
     }    else    {
         printf("Target UNCOMPRESSED\n");
+    }   
+    if (IS_CHECKSUM) {
+        printf("Checksum   : %s\n", CHECKSUM.GetBase16().c_str());
     }
     printf( "\n");
     printf( "number of blocks: %d\n", BLOCK_NUMBER);
@@ -320,16 +347,17 @@ bool checkDevice() {
 void showHelp() {    
     printf("WifSolverCuda [-d deviceId] [-b NbBlocks] [-t NbThreads] [-s NbThreadChecks]\n");
     printf("    [-fresultp reportFile] [-fresult resultFile] [-fstatus statusFile] [-a targetAddress]\n");
-    printf("    -rangeStart hexKeyStart -rangeEnd hexKeyEnd -stride hexKeyStride\n\n");
+    printf("    -stride hexKeyStride -rangeStart hexKeyStart [-rangeEnd hexKeyEnd] [-checksum hexChecksum] \n\n");
     printf("-rangeStart hexKeyStart: decoded initial key with compression flag and checksum \n");
     printf("-rangeEnd hexKeyEnd: decoded end key with compression flag and checksum \n");
+    printf("-checksum hexChecksum: decoded checksum, cannot be modified with a stride  \n");
     printf("-stride hexKeyStride: full stride calculated as 58^(missing char index) \n");
     printf("-fresult resultFile: file for final result (default: %s)\n", fileResult.c_str());
     printf("-fresultp reportFile: file for each WIF with correct checksum (default: %s)\n", fileResultPartial.c_str());
     printf("-fstatus statusFile: file for periodically saved status (default: %s) \n", fileStatus.c_str());
     printf("-d deviceId: default 0\n");
-    printf("-c search for compressed address\n");
-    printf("-u search for uncompressed address (default)\n");
+    printf("-c : search for compressed address\n");
+    printf("-u : search for uncompressed address (default)\n");
     printf("-b NbBlocks: default processorCount * 12\n");
     printf("-t NbThreads: default deviceMax / 4\n");
     printf("-s NbThreadChecks: default 3364\n");
@@ -344,12 +372,12 @@ bool readArgs(int argc, char** argv) {
     while (a < argc) {
         if (strcmp(argv[a], "-h") == 0) {
             return true;
-        }else
-        if (strcmp(argv[a], "-d") == 0) {
+        }
+        else if (strcmp(argv[a], "-d") == 0) {
             a++;
             DEVICE_NR = strtol(argv[a], NULL, 10);
-        }else
-        if (strcmp(argv[a], "-c") == 0) {
+        }
+        else if (strcmp(argv[a], "-c") == 0) {
             COMPRESSED = true;
         }
         else if (strcmp(argv[a], "-u") == 0) {
@@ -397,6 +425,11 @@ bool readArgs(int argc, char** argv) {
         else if (strcmp(argv[a], "-a") == 0) {
             a++;
             TARGET_ADDRESS = string(argv[a]);
+        }
+        else if (strcmp(argv[a], "-checksum") == 0) {
+            a++;
+            CHECKSUM.SetBase16((char*)string(argv[a]).c_str());
+            IS_CHECKSUM = true;
         }
         a++;
     }    
