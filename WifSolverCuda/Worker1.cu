@@ -1,6 +1,6 @@
 #include "Worker.cuh"
 
-
+//todo collector preparer _shared
 __global__ void kernelUncompressed(bool* buffResult, uint64_t* buffRangeStart, uint64_t* buffStride, const int threadNumberOfChecks) {
 	uint64_t _stride[5];
 	uint64_t _start[5];
@@ -13,7 +13,6 @@ __global__ void kernelUncompressed(bool* buffResult, uint64_t* buffRangeStart, u
     _add(_start, _startStride);
     beu32 d_hash[8];
 
-	//todo start + txId * stride
 	for (uint64_t i = 0, resultIx = tIx ; i < threadNumberOfChecks; i++, resultIx++) {
         unsigned int checksum = _start[0] & 0xffffffff;
         buffResult[resultIx] = false;
@@ -23,9 +22,34 @@ __global__ void kernelUncompressed(bool* buffResult, uint64_t* buffRangeStart, u
 		_add(_start, _stride);
 	}
 }
+__global__ void kernelCompressed(bool* buffResult, uint64_t* buffRangeStart, uint64_t* buffStride, const int threadNumberOfChecks) {
+    uint64_t _stride[5];
+    uint64_t _start[5];
+    uint64_t _startStride[5];
+    _load(_start, buffRangeStart);
+    _load(_stride, buffStride);
+
+    int64_t tIx = (threadIdx.x + blockIdx.x * blockDim.x) * threadNumberOfChecks;
+    IMult(_startStride, _stride, tIx);
+    _add(_start, _startStride);
+    beu32 d_hash[8];
+
+    for (uint64_t i = 0, resultIx = tIx; i < threadNumberOfChecks; i++, resultIx++) {
+        if (((_start[0] & 0xff00000000) >> 32) != 0x01) {
+            _add(_start, _stride);
+            buffResult[resultIx] = false;
+            continue;
+        }
+        unsigned int checksum = _start[0] & 0xffffffff;    
+        buffResult[resultIx] = false;
+        if (_checksumDoubleSha256CheckCompressed(checksum, d_hash, _start)) {
+            buffResult[resultIx] = true;
+        }   
+        _add(_start, _stride);
+    }
+}
 
 __global__ void resultCollector(bool* buffResult, uint64_t* buffCombinedResult, const uint64_t threadNumberOfChecks) {
-
     int64_t tIx = blockIdx.x * blockDim.x ;
     buffCombinedResult[blockIdx.x] = 0;
     for (uint64_t i = 0, resultIx = tIx * threadNumberOfChecks; i < threadNumberOfChecks; i++, resultIx++) {
@@ -35,6 +59,28 @@ __global__ void resultCollector(bool* buffResult, uint64_t* buffCombinedResult, 
             return;
         }
     }
+}
+
+__device__ bool _checksumDoubleSha256CheckCompressed(unsigned int checksum, beu32* d_hash, uint64_t* _start) {
+    sha256Kernel(d_hash,
+        _start[4] >> 16,
+        (_start[4] & 0x0000ffff) << 16 | _start[3] >> 48,
+        (_start[3] & 0xffffffffffff) >> 16,
+        (_start[3] & 0x0000ffff) << 16 | _start[2] >> 48,
+        (_start[2] & 0xffffffffffff) >> 16,
+        (_start[2] & 0x0000ffff) << 16 | _start[1] >> 48,
+        (_start[1] & 0xffffffffffff) >> 16,
+        (_start[1] & 0x0000ffff) << 16 | _start[0] >> 48,
+        ((_start[0] & 0xffffffffffff) >> 16) & 0xffff0000 | 0x8000,
+        0x00000000,
+        0x00000000,
+        0x00000000,
+        0x00000000,
+        0x00000000,
+        0x00000000,
+        0x110);
+
+    return _checksumDoubleSha256(checksum, d_hash);
 }
 
 __device__ bool _checksumDoubleSha256CheckUncompressed(unsigned int checksum, beu32* d_hash, uint64_t* _start) {
@@ -89,11 +135,11 @@ __device__ void sha256Kernel(beu32* const hash, C16(COMMA, EMPTY)) {
     H8(EMPTY, EMPTY);
 }
 
-__device__ __noinline__ void _add(uint64_t* C, uint64_t* A) {
+__device__ void _add(uint64_t* C, uint64_t* A) {
     __Add1(C, A);
 }
 
-__device__ __noinline__ void _load(uint64_t* C, uint64_t* A) {
+__device__ void _load(uint64_t* C, uint64_t* A) {
     __Load(C, A);
 }
 

@@ -54,17 +54,12 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.1-beta\n\n");
+    printf("WifSolver 0.2\n\n");
 
     if (readArgs(argc, argv)) {
         showHelp(); 
         printFooter();
         return 0;
-    }
-
-    if (COMPRESSED) {
-        printf("COMPRESSED not supported (yet)\n");
-        return 1;
     }
 
     if (!checkDevice()) {
@@ -131,7 +126,7 @@ cudaError_t processCuda() {
         cudaStatus = cudaMemcpy(dev_buffRangeStart, buffRangeStart, NB64BLOCK * sizeof(uint64_t), cudaMemcpyHostToDevice);
         //launch work
         if (COMPRESSED) {
-            break;
+            kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (dev_buffDeviceResult, dev_buffRangeStart, dev_buffStride, THREAD_STEPS);
         }
         else {            
             kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (dev_buffDeviceResult, dev_buffRangeStart, dev_buffStride, THREAD_STEPS);
@@ -240,25 +235,21 @@ Error:
 
 void processCandidate(Int &toTest) {     
     FILE* keys;
-    char rmdhash[21], address[50];
-    keys = fopen(fileResultPartial.c_str(), "a+");
+    char rmdhash[21], address[50];    
     toTest.SetBase16((char*)toTest.GetBase16().substr(2, 64).c_str());        
     Point publickey = secp->ComputePublicKey(&toTest);        
     secp->GetHash160(P2PKH, COMPRESSED, publickey, (unsigned char*)rmdhash);
-    addressToBase58(rmdhash, address);
-    fprintf(keys, "%s\n", address);
-    fprintf(keys, "%s\n", toTest.GetBase16().c_str());
-    fclose(keys);
+    addressToBase58(rmdhash, address);    
     if (!TARGET_ADDRESS.empty()) {
         if (TARGET_ADDRESS._Equal(address)) {
-            RESULT = true;
+            RESULT = true;            
+            printf("\n");
+            printf("found: %s\n", address);
+            printf("key  : %s\n", toTest.GetBase16().c_str());
             keys = fopen(fileResult.c_str(), "a+");
             fprintf(keys, "%s\n", address);
             fprintf(keys, "%s\n", toTest.GetBase16().c_str());
             fclose(keys);
-            printf("\n");
-            printf("found: %s\n", address);
-            printf("key  : %s\n", toTest.GetBase16().c_str());
             return;
         }
     }
@@ -266,6 +257,10 @@ void processCandidate(Int &toTest) {
         printf("\n");
         printf("found: %s\n", address);
         printf("key  : %s\n", toTest.GetBase16().c_str());
+        keys = fopen(fileResultPartial.c_str(), "a+");
+        fprintf(keys, "%s\n", address);
+        fprintf(keys, "%s\n", toTest.GetBase16().c_str());
+        fclose(keys);
     }
 }
 
@@ -277,6 +272,11 @@ void printConfig() {
     printf( "Stride     : %s\n", STRIDE.GetBase16().c_str());
     if (!TARGET_ADDRESS.empty()) {
         printf( "Target     : %s\n", TARGET_ADDRESS.c_str());
+    }
+    if (COMPRESSED) {
+        printf("Target COMPRESSED\n");
+    }    else    {
+        printf("Target UNCOMPRESSED\n");
     }
     printf( "\n");
     printf( "number of blocks: %d\n", BLOCK_NUMBER);
@@ -328,6 +328,8 @@ void showHelp() {
     printf("-fresultp reportFile: file for each WIF with correct checksum (default: %s)\n", fileResultPartial.c_str());
     printf("-fstatus statusFile: file for periodically saved status (default: %s) \n", fileStatus.c_str());
     printf("-d deviceId: default 0\n");
+    printf("-c search for compressed address\n");
+    printf("-u search for uncompressed address (default)\n");
     printf("-b NbBlocks: default processorCount * 12\n");
     printf("-t NbThreads: default deviceMax / 4\n");
     printf("-s NbThreadChecks: default 3364\n");
@@ -348,11 +350,9 @@ bool readArgs(int argc, char** argv) {
             DEVICE_NR = strtol(argv[a], NULL, 10);
         }else
         if (strcmp(argv[a], "-c") == 0) {
-            a++;
             COMPRESSED = true;
         }
         else if (strcmp(argv[a], "-u") == 0) {
-            a++;
             COMPRESSED = false;
         }
         else if (strcmp(argv[a], "-t") == 0) {
