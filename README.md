@@ -54,8 +54,7 @@ Solver for described example is based on fact that stride modifies decoded check
 Similar test for compressed WIF (target _KzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzWK7YY3s_):
 
     -stride 7479027ea100 -c -rangeStart 8070cfa0d40309798a5bd144a396478b5b5ae3305b7413601b18767654f1108a02787692623a  -a 1PzaLTZS3J3HqGfsa8Z2jfkCT1QpSMVunD
-
-    
+   
 For WIFs where stride does not collide with checksum, other algorithm will be needed.
         
 Build
