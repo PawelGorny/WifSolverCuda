@@ -57,7 +57,7 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.3.1\n\n");
+    printf("WifSolver 0.3.2\n\n");
 
     if (readArgs(argc, argv)) {
         showHelp(); 
@@ -81,7 +81,7 @@ int main(int argc, char** argv)
     
     time = std::chrono::system_clock::now();
     s_time = std::chrono::system_clock::to_time_t(time);
-    std::cout << "Work finished at " << std::ctime(&s_time);
+    std::cout << "\nWork finished at " << std::ctime(&s_time);
 
     cudaStatus = cudaDeviceReset();
     if (cudaStatus != cudaSuccess) {
@@ -168,7 +168,8 @@ cudaError_t processCuda() {
             cudaStatus = cudaMemcpy(buffCollectorWork, dev_buffCollectorWork, 1 * sizeof(bool), cudaMemcpyDeviceToHost);
             bool anyResult = buffCollectorWork[0];
             buffCollectorWork[0] = false;
-            cudaStatus = cudaMemcpy(dev_buffCollectorWork, buffCollectorWork, 1 * sizeof(bool), cudaMemcpyHostToDevice);
+            cudaStatus = cudaMemcpyAsync(dev_buffCollectorWork, buffCollectorWork, 1 * sizeof(bool), cudaMemcpyHostToDevice);
+            bool noZero = false;
             while (anyResult) {
                 resultCollector << <BLOCK_NUMBER, 1 >> > (dev_buffDeviceResult, dev_buffResult, THREAD_STEPS * BLOCK_THREADS);
                 cudaStatus = cudaGetLastError();
@@ -188,7 +189,11 @@ cudaError_t processCuda() {
                 }
                 anyResult = false;
                 for (int i = 0; i < COLLECTOR_SIZE; i++) {
-                    if (buffResult[i] > 0) {
+                    if (buffResult[i] == 0 && noZero) {
+                        break;
+                    }
+                    if (buffResult[i] >= 0) {
+                        noZero = true;
                         Int toTest = new Int(&RANGE_START);
                         Int diff = new Int(&STRIDE);
                         diff.Mult(buffResult[i]);
@@ -200,7 +205,7 @@ cudaError_t processCuda() {
             }
         }
         else {
-            //pure output
+            //pure output, for debug 
             cudaStatus = cudaMemcpy(buffDeviceResult, dev_buffDeviceResult, outputSize * sizeof(bool), cudaMemcpyDeviceToHost);
             if (cudaStatus != cudaSuccess) {
                 fprintf(stderr, "cudaMemcpy failed!");
@@ -331,10 +336,10 @@ bool checkDevice() {
         printf("%s (%2d procs)\n", props.name, props.multiProcessorCount);
         printf("maxThreadsPerBlock: %2d\n\n", props.maxThreadsPerBlock);
         if (BLOCK_NUMBER == 0) {
-            BLOCK_NUMBER = props.multiProcessorCount * 2;
+            BLOCK_NUMBER = props.multiProcessorCount * 8;
         }
         if (BLOCK_THREADS == 0) {
-            BLOCK_THREADS = props.maxThreadsPerBlock / 4;
+            BLOCK_THREADS = (props.maxThreadsPerBlock / 8) * 5;
         }
         outputSize = BLOCK_NUMBER * BLOCK_THREADS * THREAD_STEPS;
         loopStride = new Int(&STRIDE);
@@ -358,8 +363,8 @@ void showHelp() {
     printf("-d deviceId: default 0\n");
     printf("-c : search for compressed address\n");
     printf("-u : search for uncompressed address (default)\n");
-    printf("-b NbBlocks: default processorCount * 12\n");
-    printf("-t NbThreads: default deviceMax / 4\n");
+    printf("-b NbBlocks: default processorCount * 8\n");
+    printf("-t NbThreads: default deviceMax/8 * 5\n");
     printf("-s NbThreadChecks: default 3364\n");
     printf("-a targetAddress: expected address\n");    
 }
