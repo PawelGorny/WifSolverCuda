@@ -21,9 +21,6 @@ Usage:
      -t NbThreads: default deviceMax / 4
      -s NbThreadChecks: default 3364
      -a targetAddress: expected address
-     
-Currently program supports only the case of compressed or uncompressed WIF with missing characters in the middle.
-Support for WIFs with characters missing on the beginning will be added very soon.
 
 Program could search for given address or search for any valid WIF with a given configuration. 
  
