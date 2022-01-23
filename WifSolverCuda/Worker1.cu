@@ -114,7 +114,7 @@ __global__ void kernelCompressed(bool* buffResult, bool* buffCollectorWork, uint
 
 __global__ void resultCollector(bool* buffResult, uint64_t* buffCombinedResult, const uint64_t threadNumberOfChecks) {
     int64_t tIx = blockIdx.x * blockDim.x ;
-    buffCombinedResult[blockIdx.x] = 0;
+    buffCombinedResult[blockIdx.x] = 0xffffffffffff;
     for (uint64_t i = 0, resultIx = tIx * threadNumberOfChecks; i < threadNumberOfChecks; i++, resultIx++) {
         if (buffResult[resultIx]) {
             buffCombinedResult[blockIdx.x] = resultIx;

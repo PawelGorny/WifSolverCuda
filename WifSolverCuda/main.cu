@@ -57,7 +57,7 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.3.2\n\n");
+    printf("WifSolver 0.3.3\n\n");
 
     if (readArgs(argc, argv)) {
         showHelp(); 
@@ -189,10 +189,7 @@ cudaError_t processCuda() {
                 }
                 anyResult = false;
                 for (int i = 0; i < COLLECTOR_SIZE; i++) {
-                    if (buffResult[i] == 0 && noZero) {
-                        break;
-                    }
-                    if (buffResult[i] >= 0) {
+                    if (buffResult[i] != 0xffffffffffff) {
                         noZero = true;
                         Int toTest = new Int(&RANGE_START);
                         Int diff = new Int(&STRIDE);
