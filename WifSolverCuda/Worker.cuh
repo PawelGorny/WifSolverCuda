@@ -11,7 +11,7 @@ __global__ void kernelUncompressed(bool* buffResult, bool* buffCollectorWork, ui
 __global__ void kernelCompressed(bool* buffResult, bool* buffCollectorWork, uint64_t* buffRangeStart, uint64_t* buffStride, const int threadNumberOfChecks);
 __global__ void kernelUncompressed(bool* buffResult, bool* buffCollectorWork, uint64_t* buffRangeStart, uint64_t* buffStride, const int threadNumberOfChecks, const uint32_t checksum);
 __global__ void kernelCompressed(bool* buffResult, bool* buffCollectorWork, uint64_t* buffRangeStart, uint64_t* buffStride, const int threadNumberOfChecks, const uint32_t checksum);
-__global__ void resultCollector(bool* buffResult, uint64_t* buffCombinedResult, const uint64_t threadNumberOfChecks);
+__global__ void resultCollector(bool* buffResult, uint64_t* buffCombinedResult, const uint64_t threadsInBlockNumberOfChecks);
 
 __device__ bool _checksumDoubleSha256CheckUncompressed(unsigned int checksum, beu32* d_hash, uint64_t* _start);
 __device__ bool _checksumDoubleSha256CheckCompressed(unsigned int checksum, beu32* d_hash, uint64_t* _start);
