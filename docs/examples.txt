@@ -1,0 +1,37 @@
+===============================================================================
+19NzcPZvZMSNQk8sDbSiyjeKpEVpaS1212
+5KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKSmnqY 1280d083
+80 c59cb0997ad73f7bf8621b1955caf80b304ded0a48e5b8f28c7b8f9356ec35e5 1280d083
+===============================================================================
+5KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK______KKKSmnqY
+                                          ^ 58^8 = 7479027ea100
+5KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK111111KKKSmnqY
+80 c59cb0997ad73f7bf8621b1955caf80b304ded0a48e5b8f28c7a4990fb3b6d3f ffda3283
+
+-u -rangeStart 80c59cb0997ad73f7bf8621b1955caf80b304ded0a48e5b8f28c7a4990fb3b6d3fffda3283 -stride 7479027ea100 -a 19NzcPZvZMSNQk8sDbSiyjeKpEVpaS1212
+-------------------------------------------------------------------------------
+5K______KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKSmnqY
+       ^ 58^43 = edbafda67ca37188cf28263571f03b9716879e4acc9c514ab67280000000000
+5K111111KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKSmnqY
+80 9c0619a973dbe5282bc690fd3ae3550586134474234fe6c55433cbafdfdf85e5 1280d083
+
+-u -rangeStart 809c0619a973dbe5282bc690fd3ae3550586134474234fe6c55433cbafdfdf85e51280d083 -stride edbafda67ca37188cf28263571f03b9716879e4acc9c514ab67280000000000 -checksum 1280d083 -a 19NzcPZvZMSNQk8sDbSiyjeKpEVpaS1212
+
+===============================================================================
+1M9JqAMbCBwtvNLedwNG4TjiPsxATJrvxq
+L5KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKJsczi8wg
+80 f1953d849c8450c9d7c9a6beaf9d565366137e487e5c45d40b02f1f65109e435 01 4d463f37
+===============================================================================
+L5KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK______KKKJsczi8wg
+                                        ^ 58^11 = 15ac264554f032800
+L5KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK111111KKKJsczi8wg
+80 f1953d849c8450c9d7c9a6beaf9d565366137e487e5c45d407385c0106810981 b2 70f18f37
+
+-c -rangeStart 80f1953d849c8450c9d7c9a6beaf9d565366137e487e5c45d407385c0106810981b270f18f37 -stride 15ac264554f032800 -a 1M9JqAMbCBwtvNLedwNG4TjiPsxATJrvxq
+-------------------------------------------------------------------------------
+L5K______KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKJsczi8wg
+        ^ 58^43 = edbafda67ca37188cf28263571f03b9716879e4acc9c514ab67280000000000
+L5K111111KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKJsczi8wg
+80 f16ba6edac7d556f83fd0b3493826eb06069439fe836b001ddcaaa326d92d785 01 4d463f37
+
+-c -rangeStart 80f16ba6edac7d556f83fd0b3493826eb06069439fe836b001ddcaaa326d92d785014d463f37 -stride edbafda67ca37188cf28263571f03b9716879e4acc9c514ab67280000000000 -checksum 4d463f37 -a 1M9JqAMbCBwtvNLedwNG4TjiPsxATJrvxq
