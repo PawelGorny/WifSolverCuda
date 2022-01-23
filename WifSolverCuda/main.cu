@@ -57,7 +57,7 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.4.0\n\n");
+    printf("WifSolver 0.4.1\n\n");
 
     if (readArgs(argc, argv)) {
         showHelp(); 
@@ -98,11 +98,11 @@ cudaError_t processCuda() {
     uint64_t* buffRangeStart = new uint64_t[NB64BLOCK];
     uint64_t* dev_buffRangeStart = new uint64_t[NB64BLOCK];
     uint64_t* buffStride = new uint64_t[NB64BLOCK];
-    uint64_t* dev_buffStride = new uint64_t[NB64BLOCK];    
     
     int COLLECTOR_SIZE = BLOCK_NUMBER;
 
     __Load(buffStride, STRIDE.bits64);
+    loadStride(buffStride);
 
     bool* buffDeviceResult = new bool[outputSize];
     bool* dev_buffDeviceResult = new bool[outputSize];
@@ -110,10 +110,7 @@ cudaError_t processCuda() {
         buffDeviceResult[i] = false;
     }
     cudaStatus = cudaMalloc((void**)&dev_buffDeviceResult, outputSize * sizeof(bool));
-    cudaStatus = cudaMemcpyAsync(dev_buffDeviceResult, buffDeviceResult, outputSize * sizeof(bool), cudaMemcpyHostToDevice);
-    
-    cudaStatus = cudaMalloc((void**)&dev_buffStride, NB64BLOCK * sizeof(uint64_t));
-    cudaStatus = cudaMemcpy(dev_buffStride, buffStride, NB64BLOCK * sizeof(uint64_t), cudaMemcpyHostToDevice);         
+    cudaStatus = cudaMemcpyAsync(dev_buffDeviceResult, buffDeviceResult, outputSize * sizeof(bool), cudaMemcpyHostToDevice);       
         
     uint64_t* buffResult = new uint64_t[COLLECTOR_SIZE];
     uint64_t* dev_buffResult = new uint64_t[COLLECTOR_SIZE];
@@ -143,16 +140,16 @@ cudaError_t processCuda() {
         //launch work
         if (COMPRESSED) {
             if (IS_CHECKSUM) {
-                kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (dev_buffDeviceResult, dev_buffCollectorWork, dev_buffRangeStart, dev_buffStride, THREAD_STEPS, expectedChecksum);
+                kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (dev_buffDeviceResult, dev_buffCollectorWork, dev_buffRangeStart, THREAD_STEPS, expectedChecksum);
             }else{
-                kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (dev_buffDeviceResult, dev_buffCollectorWork, dev_buffRangeStart, dev_buffStride, THREAD_STEPS);
+                kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (dev_buffDeviceResult, dev_buffCollectorWork, dev_buffRangeStart, THREAD_STEPS);
             }            
         }
         else {            
             if (IS_CHECKSUM) {
-                kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (dev_buffDeviceResult, dev_buffCollectorWork, dev_buffRangeStart, dev_buffStride, THREAD_STEPS, expectedChecksum);
+                kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (dev_buffDeviceResult, dev_buffCollectorWork, dev_buffRangeStart, THREAD_STEPS, expectedChecksum);
             }else{
-                kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (dev_buffDeviceResult, dev_buffCollectorWork, dev_buffRangeStart, dev_buffStride, THREAD_STEPS);
+                kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (dev_buffDeviceResult, dev_buffCollectorWork, dev_buffRangeStart, THREAD_STEPS);
             }
             
         }        
@@ -255,7 +252,6 @@ Error:
     cudaFree(dev_buffResult);
     cudaFree(dev_buffDeviceResult);
     cudaFree(dev_buffRangeStart);
-    cudaFree(dev_buffStride);
     cudaFree(dev_buffCollectorWork);
     return cudaStatus;
 }
@@ -263,7 +259,13 @@ Error:
 
 void processCandidate(Int &toTest) {     
     FILE* keys;
-    char rmdhash[21], address[50];    
+    size_t dataLen = COMPRESSED ? 38 : 37;
+    size_t wifLen = 53;
+    char rmdhash[21], address[50], wif[53];        
+    unsigned char* buff = new unsigned char[dataLen];
+    for (int i = 0, d=dataLen-1; i < dataLen; i++, d--) {
+        buff[i] = toTest.GetByte(d);
+    }       
     toTest.SetBase16((char*)toTest.GetBase16().substr(2, 64).c_str());        
     Point publickey = secp->ComputePublicKey(&toTest);        
     secp->GetHash160(P2PKH, COMPRESSED, publickey, (unsigned char*)rmdhash);
@@ -274,9 +276,13 @@ void processCandidate(Int &toTest) {
             printf("\n");
             printf("found: %s\n", address);
             printf("key  : %s\n", toTest.GetBase16().c_str());
+            if (b58encode(wif, &wifLen, buff, dataLen)) {
+                printf("WIF  : %s\n", wif);
+            }
             keys = fopen(fileResult.c_str(), "a+");
             fprintf(keys, "%s\n", address);
-            fprintf(keys, "%s\n", toTest.GetBase16().c_str());
+            fprintf(keys, "%s\n", wif);
+            fprintf(keys, "%s\n\n", toTest.GetBase16().c_str());            
             fclose(keys);
             return;
         }
@@ -285,9 +291,13 @@ void processCandidate(Int &toTest) {
         printf("\n");
         printf("found: %s\n", address);
         printf("key  : %s\n", toTest.GetBase16().c_str());
+        if (b58encode(wif, &wifLen, buff, dataLen)) {
+            printf("WIF  : %s\n", wif);
+        }
         keys = fopen(fileResultPartial.c_str(), "a+");
         fprintf(keys, "%s\n", address);
-        fprintf(keys, "%s\n", toTest.GetBase16().c_str());
+        fprintf(keys, "%s\n", wif);
+        fprintf(keys, "%s\n\n", toTest.GetBase16().c_str());        
         fclose(keys);
     }
 }

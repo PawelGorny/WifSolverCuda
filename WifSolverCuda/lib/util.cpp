@@ -189,9 +189,13 @@ void addressToBase58(char* rmd, char* dst) {
 	memcpy(digest + 1, rmd, 20);
 	sha256((uint8_t*)digest, 21, (uint8_t*)digest + 21);
 	sha256((uint8_t*)digest + 21, 32, (uint8_t*)digest + 21);
-	if (!b58enc(dst, &pubaddress_size, digest, 25)) {
+	if (!b58encode(dst, &pubaddress_size, digest, 25)) {
 		fprintf(stderr, "error b58enc\n");
 	}
+}
+
+bool b58encode(char* b58, size_t* b58sz, const void* data, size_t binsz) {
+	return b58enc(b58, b58sz, data, binsz);
 }
 
 std::string formatDouble(const char* formatStr, double value)

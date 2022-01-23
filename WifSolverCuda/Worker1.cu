@@ -1,12 +1,12 @@
 #include "Worker.cuh"
 
-__global__ void kernelUncompressed(bool* buffResult, bool* buffCollectorWork, uint64_t* buffRangeStart, uint64_t* buffStride, const int threadNumberOfChecks, const uint32_t checksum) {
-    uint64_t _stride[5];
+__device__ __constant__ uint64_t _stride[5];
+
+__global__ void kernelUncompressed(bool* buffResult, bool* buffCollectorWork, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks, const uint32_t checksum) {
     uint64_t _start[5];
     uint64_t _startStride[5];
     beu32 d_hash[8];
     _load(_start, buffRangeStart);
-    _load(_stride, buffStride);
 
     int64_t tIx = (threadIdx.x + blockIdx.x * blockDim.x) * threadNumberOfChecks;
     IMult(_startStride, _stride, tIx);
@@ -19,13 +19,11 @@ __global__ void kernelUncompressed(bool* buffResult, bool* buffCollectorWork, ui
         _add(_start, _stride);        
     }
 }
-__global__ void kernelCompressed(bool* buffResult, bool* buffCollectorWork, uint64_t* buffRangeStart, uint64_t* buffStride, const int threadNumberOfChecks, const uint32_t checksum) {
-    uint64_t _stride[5];
+__global__ void kernelCompressed(bool* buffResult, bool* buffCollectorWork, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks, const uint32_t checksum) {
     uint64_t _start[5];
     uint64_t _startStride[5];
     beu32 d_hash[8];
     _load(_start, buffRangeStart);
-    _load(_stride, buffStride);
 
     int64_t tIx = (threadIdx.x + blockIdx.x * blockDim.x) * threadNumberOfChecks;
     IMult(_startStride, _stride, tIx);
@@ -42,13 +40,11 @@ __global__ void kernelCompressed(bool* buffResult, bool* buffCollectorWork, uint
         _add(_start, _stride);
     }    
 }
-__global__ void kernelUncompressed(bool* buffResult, bool* buffCollectorWork, uint64_t* buffRangeStart, uint64_t* buffStride, const int threadNumberOfChecks) {
-	uint64_t _stride[5];
+__global__ void kernelUncompressed(bool* buffResult, bool* buffCollectorWork, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks) {
 	uint64_t _start[5];
     uint64_t _startStride[5];
     beu32 d_hash[8];
     _load(_start, buffRangeStart);
-    _load(_stride, buffStride);
 
     int64_t tIx = (threadIdx.x + blockIdx.x * blockDim.x) * threadNumberOfChecks;
     IMult(_startStride, _stride, tIx);
@@ -61,13 +57,11 @@ __global__ void kernelUncompressed(bool* buffResult, bool* buffCollectorWork, ui
 		_add(_start, _stride);
 	}
 }
-__global__ void kernelCompressed(bool* buffResult, bool* buffCollectorWork, uint64_t* buffRangeStart, uint64_t* buffStride, const int threadNumberOfChecks) {
-    uint64_t _stride[5];
+__global__ void kernelCompressed(bool* buffResult, bool* buffCollectorWork, uint64_t* const __restrict__  buffRangeStart, const int threadNumberOfChecks) {
     uint64_t _start[5];
     uint64_t _startStride[5];
     beu32 d_hash[8];
     _load(_start, buffRangeStart);
-    _load(_stride, buffStride);
 
     int64_t tIx = (threadIdx.x + blockIdx.x * blockDim.x) * threadNumberOfChecks;
     IMult(_startStride, _stride, tIx);
@@ -194,3 +188,6 @@ __device__ void IMult(uint64_t* r, uint64_t* a, int64_t b) {
     Mult2(r, t, b)
 }
 
+cudaError_t loadStride(uint64_t* stride){
+    return cudaMemcpyToSymbol(_stride, stride, 5 * sizeof(uint64_t));
+}
