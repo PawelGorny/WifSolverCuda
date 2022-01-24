@@ -73,7 +73,7 @@ Go to WifSolverCuda/ subfolder and execute _make all_. If your device does not s
 
 Performance
 -----------
-One's must modify number of blocks and number of threads in each block to find the ones which are the best for his card. Number of test performed by each thread also could have impact of global performance/latency.  
+User should modify number of blocks and number of threads in each block to find values which are the best for his card. Number of test performed by each thread also could have impact of global performance/latency.  
 
 Test card: RTX3060 (eGPU!) with 224 BLOCKS & 640 BLOCK_THREADS (program default values) checks around 10000 MKey/s for compressed address with missing characters in the middle (collision with checksum) and around 1300-1400 Mkey/s for other cases; other results (using default values of blocks, threads and steps per thread):
 
