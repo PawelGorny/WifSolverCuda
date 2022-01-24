@@ -85,3 +85,80 @@ bool b58enc(char* b58, size_t* b58sz, const void* data, size_t binsz)
 	free(buf);
 	return true;
 }
+
+bool b58tobin(void* bin, size_t* binszp, const char* b58, size_t b58sz)
+{
+	size_t binsz = *binszp;
+	const unsigned char* b58u = (void*)b58;
+	unsigned char* binu = bin;
+	size_t outisz = (binsz + sizeof(b58_almostmaxint_t) - 1) / sizeof(b58_almostmaxint_t);
+	b58_almostmaxint_t* outi;
+	outi = (int*)malloc(sizeof(b58_almostmaxint_t) * outisz);
+	b58_maxint_t t;
+	b58_almostmaxint_t c;
+	size_t i, j;
+	uint8_t bytesleft = binsz % sizeof(b58_almostmaxint_t);
+	b58_almostmaxint_t zeromask = bytesleft ? (b58_almostmaxint_mask << (bytesleft * 8)) : 0;
+	unsigned zerocount = 0;
+
+	if (!b58sz)
+		b58sz = strlen(b58);
+
+	for (i = 0; i < outisz; ++i) {
+		outi[i] = 0;
+	}
+
+	// Leading zeros, just count
+	for (i = 0; i < b58sz && b58u[i] == '1'; ++i)
+		++zerocount;
+
+	for (; i < b58sz; ++i)
+	{
+		if (b58u[i] & 0x80)
+			// High-bit set on invalid digit
+			return false;
+		if (b58digits_map[b58u[i]] == -1)
+			// Invalid base58 digit
+			return false;
+		c = (unsigned)b58digits_map[b58u[i]];
+		for (j = outisz; j--; )
+		{
+			t = ((b58_maxint_t)outi[j]) * 58 + c;
+			c = t >> b58_almostmaxint_bits;
+			outi[j] = t & b58_almostmaxint_mask;
+		}
+		if (c)
+			// Output number too big (carry to the next int32)
+			return false;
+		if (outi[0] & zeromask)
+			// Output number too big (last int32 filled too far)
+			return false;
+	}
+
+	j = 0;
+	if (bytesleft) {
+		for (i = bytesleft; i > 0; --i) {
+			*(binu++) = (outi[0] >> (8 * (i - 1))) & 0xff;
+		}
+		++j;
+	}
+
+	for (; j < outisz; ++j)
+	{
+		for (i = sizeof(*outi); i > 0; --i) {
+			*(binu++) = (outi[j] >> (8 * (i - 1))) & 0xff;
+		}
+	}
+
+	// Count canonical base58 byte count
+	binu = bin;
+	for (i = 0; i < binsz; ++i)
+	{
+		if (binu[i])
+			break;
+		--* binszp;
+	}
+	*binszp += zerocount;
+
+	return true;
+}

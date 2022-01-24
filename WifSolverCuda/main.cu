@@ -24,6 +24,7 @@ void showHelp();
 bool checkDevice();
 void printConfig();
 void printFooter();
+void decodeWif();
 
 cudaError_t processCuda();
 
@@ -41,6 +42,8 @@ string TARGET_ADDRESS = "";
 Int CHECKSUM;
 bool IS_CHECKSUM = false;
 
+bool DECODE = false;
+string WIF_TO_DECODE;
 
 bool RESULT = false;
 bool useCollector = false;
@@ -57,10 +60,16 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.4.1\n\n");
+    printf("WifSolver 0.4.2\n\n");
 
     if (readArgs(argc, argv)) {
         showHelp(); 
+        printFooter();
+        return 0;
+    }
+
+    if (DECODE) {
+        decodeWif();
         printFooter();
         return 0;
     }
@@ -256,7 +265,6 @@ Error:
     return cudaStatus;
 }
 
-
 void processCandidate(Int &toTest) {     
     FILE* keys;
     size_t dataLen = COMPRESSED ? 38 : 37;
@@ -302,8 +310,6 @@ void processCandidate(Int &toTest) {
     }
 }
 
-
-
 void printConfig() {
     printf("Range start: %s\n", RANGE_START.GetBase16().c_str());
     printf("Range end  : %s\n", RANGE_END.GetBase16().c_str());
@@ -328,8 +334,7 @@ void printConfig() {
 
 void printFooter() {
     printf("------------------------\n");
-    printf("source: https://github.com/PawelGorny/WifSolverCuda\n");
-    printf("If you found this program useful, please donate - bitcoin:34dEiyShGJcnGAg2jWhcoDDRxpennSZxg8\n");
+    printf("source: https://github.com/PawelGorny/WifSolverCuda\n\n");
 }
 
 bool checkDevice() {
@@ -361,7 +366,8 @@ bool checkDevice() {
 void showHelp() {    
     printf("WifSolverCuda [-d deviceId] [-b NbBlocks] [-t NbThreads] [-s NbThreadChecks]\n");
     printf("    [-fresultp reportFile] [-fresult resultFile] [-fstatus statusFile] [-a targetAddress]\n");
-    printf("    -stride hexKeyStride -rangeStart hexKeyStart [-rangeEnd hexKeyEnd] [-checksum hexChecksum] \n\n");
+    printf("    -stride hexKeyStride -rangeStart hexKeyStart [-rangeEnd hexKeyEnd] [-checksum hexChecksum] \n");
+    printf("    [-decode wifToDecode] \n\n");
     printf("-rangeStart hexKeyStart: decoded initial key with compression flag and checksum \n");
     printf("-rangeEnd hexKeyEnd:     decoded end key with compression flag and checksum \n");
     printf("-checksum hexChecksum:   decoded checksum, cannot be modified with a stride  \n");
@@ -376,6 +382,8 @@ void showHelp() {
     printf("-b NbBlocks:             default processorCount * 8\n");
     printf("-t NbThreads:            default deviceMax/8 * 5\n");
     printf("-s NbThreadChecks:       default 3364\n");    
+    printf("\n");
+    printf("-decode wifToDecode:     decodes given WIF\n");
 }
  
 bool readArgs(int argc, char** argv) {
@@ -386,6 +394,12 @@ bool readArgs(int argc, char** argv) {
     while (a < argc) {
         if (strcmp(argv[a], "-h") == 0) {
             return true;
+        }else
+        if (strcmp(argv[a], "-decode") == 0) {
+            a++;
+            WIF_TO_DECODE = string(argv[a]);
+            DECODE = true;
+            return false;
         }
         else if (strcmp(argv[a], "-d") == 0) {
             a++;
@@ -473,4 +487,18 @@ bool readArgs(int argc, char** argv) {
         }
     }
     return false;
+}
+
+void decodeWif() {
+    const char* base58 = WIF_TO_DECODE.c_str();
+    size_t base58Length = WIF_TO_DECODE.size();
+    size_t keybuflen = base58Length == 52 ? 38 : 37;
+    unsigned char * keybuf = new unsigned char[keybuflen];
+    b58decode(keybuf, &keybuflen, base58, base58Length);
+    printf("WIF: %s\n", WIF_TO_DECODE.c_str());
+    printf("Decoded:\n");
+    for (int i = 0; i < keybuflen; i++) {
+        printf("%.2x", keybuf[i]);
+    }
+    printf("\n\n");
 }

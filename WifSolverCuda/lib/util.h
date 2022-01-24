@@ -37,5 +37,6 @@ void addressToBase58(char* rmd, char* dst);
 std::string formatDouble(const char* formatStr, double value);
 
 bool b58encode(char* b58, size_t* b58sz, const void* data, size_t binsz);
+bool b58decode(unsigned char* bin, size_t* binszp, const char* b58, size_t b58sz);
 
 #endif // CUSTOMUTILH
