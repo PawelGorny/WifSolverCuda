@@ -60,7 +60,7 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.4.2\n\n");
+    printf("WifSolver 0.4.3\n\n");
 
     if (readArgs(argc, argv)) {
         showHelp(); 
@@ -279,7 +279,7 @@ void processCandidate(Int &toTest) {
     secp->GetHash160(P2PKH, COMPRESSED, publickey, (unsigned char*)rmdhash);
     addressToBase58(rmdhash, address);    
     if (!TARGET_ADDRESS.empty()) {
-        if (TARGET_ADDRESS._Equal(address)) {
+        if (TARGET_ADDRESS == address) {
             RESULT = true;            
             printf("\n");
             printf("found: %s\n", address);
