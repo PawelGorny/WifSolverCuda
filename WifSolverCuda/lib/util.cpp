@@ -198,6 +198,10 @@ bool b58encode(char* b58, size_t* b58sz, const void* data, size_t binsz) {
 	return b58enc(b58, b58sz, data, binsz);
 }
 
+bool b58decode(unsigned char* bin, size_t* binszp, const char* b58, size_t b58sz) {
+	return b58tobin(bin, binszp, b58, b58sz);
+}
+
 std::string formatDouble(const char* formatStr, double value)
 {
 	char buf[100] = { 0 };

@@ -6,6 +6,7 @@ Usage:
     WifSolverCuda [-d deviceId] [-b NbBlocks] [-t NbThreads] [-s NbThreadChecks]
          [-fresultp reportFile] [-fresult resultFile] [-fstatus statusFile] [-a targetAddress]
          -stride hexKeyStride -rangeStart hexKeyStart [-rangeEnd hexKeyEnd] [-checksum hexChecksum] 
+         [-decode wifToDecode]
 
      -rangeStart hexKeyStart: decoded initial key with compression flag and checksum
      -rangeEnd hexKeyEnd:     decoded end key with compression flag and checksum
@@ -21,6 +22,8 @@ Usage:
      -b NbBlocks:             default processorCount * 8
      -t NbThreads:            default deviceMax/8 * 5
      -s NbThreadChecks:       default 3364
+
+     -decode wifToDecode:     decodes given WIF
      
 
 Program could search for given address or search for any valid WIF with a given configuration. 

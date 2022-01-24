@@ -4,13 +4,11 @@ __device__ __constant__ uint64_t _stride[5];
 
 __global__ void kernelUncompressed(bool* buffResult, bool* buffCollectorWork, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks, const uint32_t checksum) {
     uint64_t _start[5];
-    uint64_t _startStride[5];
     beu32 d_hash[8];
-    _load(_start, buffRangeStart);
 
     int64_t tIx = (threadIdx.x + blockIdx.x * blockDim.x) * threadNumberOfChecks;
-    IMult(_startStride, _stride, tIx);
-    _add(_start, _startStride);    
+    IMult(_start, _stride, tIx);
+    _add(_start, buffRangeStart);
     for (uint64_t i = 0, resultIx = tIx; i < threadNumberOfChecks; i++, resultIx++) {
         if (_checksumDoubleSha256CheckUncompressed(checksum, d_hash, _start)) {
             buffResult[resultIx] = true;
@@ -21,13 +19,11 @@ __global__ void kernelUncompressed(bool* buffResult, bool* buffCollectorWork, ui
 }
 __global__ void kernelCompressed(bool* buffResult, bool* buffCollectorWork, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks, const uint32_t checksum) {
     uint64_t _start[5];
-    uint64_t _startStride[5];
     beu32 d_hash[8];
-    _load(_start, buffRangeStart);
 
     int64_t tIx = (threadIdx.x + blockIdx.x * blockDim.x) * threadNumberOfChecks;
-    IMult(_startStride, _stride, tIx);
-    _add(_start, _startStride);    
+    IMult(_start, _stride, tIx);
+    _add(_start, buffRangeStart);
     for (uint64_t i = 0, resultIx = tIx; i < threadNumberOfChecks; i++, resultIx++) {
         if (((_start[0] & 0xff00000000) >> 32) != 0x01) {
             _add(_start, _stride);
@@ -42,13 +38,11 @@ __global__ void kernelCompressed(bool* buffResult, bool* buffCollectorWork, uint
 }
 __global__ void kernelUncompressed(bool* buffResult, bool* buffCollectorWork, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks) {
 	uint64_t _start[5];
-    uint64_t _startStride[5];
     beu32 d_hash[8];
-    _load(_start, buffRangeStart);
 
     int64_t tIx = (threadIdx.x + blockIdx.x * blockDim.x) * threadNumberOfChecks;
-    IMult(_startStride, _stride, tIx);
-    _add(_start, _startStride);
+    IMult(_start, _stride, tIx);
+    _add(_start, buffRangeStart);
 	for (uint64_t i = 0, resultIx = tIx ; i < threadNumberOfChecks; i++, resultIx++) {
         if (_checksumDoubleSha256CheckUncompressed(_start[0] & 0xffffffff, d_hash, _start)) {
             buffResult[resultIx] = true;
@@ -59,13 +53,11 @@ __global__ void kernelUncompressed(bool* buffResult, bool* buffCollectorWork, ui
 }
 __global__ void kernelCompressed(bool* buffResult, bool* buffCollectorWork, uint64_t* const __restrict__  buffRangeStart, const int threadNumberOfChecks) {
     uint64_t _start[5];
-    uint64_t _startStride[5];
     beu32 d_hash[8];
-    _load(_start, buffRangeStart);
 
     int64_t tIx = (threadIdx.x + blockIdx.x * blockDim.x) * threadNumberOfChecks;
-    IMult(_startStride, _stride, tIx);
-    _add(_start, _startStride);    
+    IMult(_start, _stride, tIx);
+    _add(_start, buffRangeStart);
     for (uint64_t i = 0, resultIx = tIx; i < threadNumberOfChecks; i++, resultIx++) {
         if (((_start[0] & 0xff00000000) >> 32) != 0x01) {
             _add(_start, _stride);
