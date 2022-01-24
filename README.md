@@ -77,8 +77,6 @@ TODO
 * build configuration for Linux
 * predefined custom step (using list of possible characters)
 * reading configuration from file
-* build-in WIF decoder
-
 
 Contact
 -------
