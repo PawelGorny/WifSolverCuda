@@ -10,12 +10,13 @@ Usage:
 
      -rangeStart hexKeyStart: decoded initial key with compression flag and checksum
      -rangeEnd hexKeyEnd:     decoded end key with compression flag and checksum
-     -stride hexKeyStride:    full stride calculated as 58^(missing char index)
+     -stride hexKeyStride:    full stride calculated as 58^(most-right missing char index)
 	 -checksum hexChecksum:   decoded checksum, cannot be modified with a stride
 	 -a targetAddress:        expected address
      -fresult resultFile:     file for final result (default: result.txt)
      -fresultp reportFile:    file for each WIF with correct checksum (default: result_partial.txt)
      -fstatus statusFile:     file for periodically saved status (default: fileStatus.txt)
+     -fstatusIntv seconds:    period between status file updates (default 60 sec)
 	 -d deviceId:             default 0
      -c :                     search for compressed address
      -u :                     search for uncompressed address (default)     
@@ -24,6 +25,8 @@ Usage:
      -s NbThreadChecks:       default 3364
 
      -decode wifToDecode:     decodes given WIF
+
+     -h :     shows help
      
 
 Program could search for given address or search for any valid WIF with a given configuration. 

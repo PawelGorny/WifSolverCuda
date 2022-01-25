@@ -25,6 +25,8 @@ bool checkDevice();
 void printConfig();
 void printFooter();
 void decodeWif();
+void printSpeed(double speed);
+void saveStatus(Int& _start);
 
 cudaError_t processCuda();
 
@@ -33,6 +35,9 @@ int DEVICE_NR = 0;
 unsigned int BLOCK_THREADS = 0;
 unsigned int BLOCK_NUMBER = 0;
 unsigned int THREAD_STEPS = 3364;
+
+size_t wifLen = 53;
+int dataLen = 37;
 
 bool COMPRESSED = false;
 Int STRIDE, RANGE_START, RANGE_END;
@@ -54,13 +59,14 @@ uint64_t outputSize;
 string fileResultPartial = "result_partial.txt";
 string fileResult = "result.txt";
 string fileStatus = "fileStatus.txt";
+int fileStatusInterval = 60;
 
 Secp256K1* secp;
 
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.4.3\n\n");
+    printf("WifSolver 0.4.4\n\n");
 
     if (readArgs(argc, argv)) {
         showHelp(); 
@@ -137,9 +143,9 @@ cudaError_t processCuda() {
     const uint32_t expectedChecksum = IS_CHECKSUM ? CHECKSUM.GetInt32() : 0;
 
     uint64_t counter = 0;
-    int counterSaveFile = 0;
         
-    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point beginCountHashrate = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point beginCountStatus = std::chrono::steady_clock::now();
     
     while (!RESULT && RANGE_START.IsLower(&RANGE_END)) {
 
@@ -172,7 +178,6 @@ cudaError_t processCuda() {
             fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching kernel!\n", cudaStatus);
             goto Error;
         }
-        //std::cout << "Time difference = " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count() << "[ms]" << std::endl;
 
         if (useCollector) {
             //summarize results            
@@ -227,34 +232,20 @@ cudaError_t processCuda() {
                 }
             }
         }       
-        //std::cout << "Time difference = " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count() << "[ms]" << std::endl;        
         RANGE_START.Add(&loopStride);
         counter += outputSize;
-        uint64_t t = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin).count();
-        if ( t > 5000) {
-            double speed = (double)((double)counter / ((double)t/1000) ) / 1000000.0;
-            std::string speedStr;
-            if (speed < 0.01) {
-                speedStr = "< 0.01 MKey/s";
-            }
-            else {
-                speedStr = formatDouble("%.2f", speed) + " MKey/s";
-            }
-            printf("\r %s", speedStr.c_str());
-            fflush(stdout);
+        int64_t tHash = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - beginCountHashrate).count();
+        int64_t tStatus = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - beginCountStatus).count();
+        if (tHash > 5) {
+            double speed = (double)((double)counter / tHash) / 1000000.0;
+            printSpeed(speed);            
             counter = 0;
-            begin = std::chrono::steady_clock::now();
-            counterSaveFile++;
-            if (counterSaveFile == 12) {
-                counterSaveFile = 0;
-                FILE* stat = fopen(fileStatus.c_str(), "w");
-                fprintf(stat, "%s\n", RANGE_START.GetBase16().c_str());
-                auto time = std::chrono::system_clock::now();
-                std::time_t s_time = std::chrono::system_clock::to_time_t(time);
-                fprintf(stat, "%s\n", std::ctime(&s_time));
-                fclose(stat);
-            }
-        }      
+            beginCountHashrate = std::chrono::steady_clock::now();
+        }
+        if (tStatus > fileStatusInterval) {
+            saveStatus(RANGE_START);
+            beginCountStatus = std::chrono::steady_clock::now();
+        }
     }//while
 
 Error:
@@ -265,10 +256,49 @@ Error:
     return cudaStatus;
 }
 
+void saveStatus(Int& _start) {
+    FILE* stat = fopen(fileStatus.c_str(), "w");
+    fprintf(stat, "%s\n", RANGE_START.GetBase16().c_str());
+    char wif[53];
+    unsigned char* buff = new unsigned char[dataLen];
+    for (int i = 0, d = dataLen - 1; i < dataLen; i++, d--) {
+        buff[i] = RANGE_START.GetByte(d);
+    }
+    if (b58encode(wif, &wifLen, buff, dataLen)) {
+        fprintf(stat, "%s\n", wif);
+    }
+    auto time = std::chrono::system_clock::now();
+    std::time_t s_time = std::chrono::system_clock::to_time_t(time);
+    fprintf(stat, "%s\n", std::ctime(&s_time));
+    fclose(stat);
+}
+
+void printSpeed(double speed) {
+    std::string speedStr;
+    if (speed < 0.01) {
+        speedStr = "< 0.01 MKey/s";
+    }
+    else {
+        if (speed < 1000) {
+            speedStr = formatDouble("%.3f", speed) + " MKey/s";
+        }
+        else {
+            speed /= 1000;
+            if (speed < 1000) {
+                speedStr = formatDouble("%.3f", speed) + " GKey/s";
+            }
+            else {
+                speed /= 1000;
+                speedStr = formatDouble("%.3f", speed) + " TKey/s";
+            }
+        }
+    }
+    printf("\r %s       ", speedStr.c_str());
+    fflush(stdout);
+}
+
 void processCandidate(Int &toTest) {     
     FILE* keys;
-    size_t dataLen = COMPRESSED ? 38 : 37;
-    size_t wifLen = 53;
     char rmdhash[21], address[50], wif[53];        
     unsigned char* buff = new unsigned char[dataLen];
     for (int i = 0, d=dataLen-1; i < dataLen; i++, d--) {
@@ -371,11 +401,12 @@ void showHelp() {
     printf("-rangeStart hexKeyStart: decoded initial key with compression flag and checksum \n");
     printf("-rangeEnd hexKeyEnd:     decoded end key with compression flag and checksum \n");
     printf("-checksum hexChecksum:   decoded checksum, cannot be modified with a stride  \n");
-    printf("-stride hexKeyStride:    full stride calculated as 58^(missing char index) \n");
+    printf("-stride hexKeyStride:    full stride calculated as 58^(most-right missing char index) \n");
     printf("-a targetAddress:        expected address\n");
     printf("-fresult resultFile:     file for final result (default: %s)\n", fileResult.c_str());
     printf("-fresultp reportFile:    file for each WIF with correct checksum (default: %s)\n", fileResultPartial.c_str());
     printf("-fstatus statusFile:     file for periodically saved status (default: %s) \n", fileStatus.c_str());
+    printf("-fstatusIntv seconds:    period between status file updates (default %d sec) \n", fileStatusInterval);
     printf("-d deviceId:             default 0\n");
     printf("-c :                     search for compressed address\n");
     printf("-u :                     search for uncompressed address (default)\n");
@@ -384,6 +415,8 @@ void showHelp() {
     printf("-s NbThreadChecks:       default 3364\n");    
     printf("\n");
     printf("-decode wifToDecode:     decodes given WIF\n");
+    printf("\n");
+    printf("-h :                     shows help\n");
 }
  
 bool readArgs(int argc, char** argv) {
@@ -450,6 +483,10 @@ bool readArgs(int argc, char** argv) {
             a++;
             fileStatus = string(argv[a]);
         }
+        else if (strcmp(argv[a], "-fstatusIntv") == 0) {
+            a++;
+            fileStatusInterval = strtol(argv[a], NULL, 10);
+        }
         else if (strcmp(argv[a], "-a") == 0) {
             a++;
             TARGET_ADDRESS = string(argv[a]);
@@ -486,6 +523,7 @@ bool readArgs(int argc, char** argv) {
             STRIDE.SetBase16((char*)string("100000000").c_str());
         }
     }
+    dataLen = COMPRESSED ? 38 : 37;
     return false;
 }
 
