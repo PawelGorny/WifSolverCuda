@@ -93,6 +93,8 @@ TODO
 * code cleaning, review of hash functions
 * predefined custom step (using list of possible characters)
 * reading configuration from file
+* auto-processing (preparing configuration) based on WIF
+* support for partially known checksum
 
 Contact
 -------
