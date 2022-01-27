@@ -67,7 +67,7 @@ Build
 -----
 Windows:
 
-Program was prepared using CUDA 11.6 - for any other version manual change in VS project config files is needed.
+Program was prepared using CUDA 11.6 - for any other version manual change in VS project config files is needed. Exe under /Releases/ was build using compute_cap=8.6, for cards 30xx. If you have older card, you must rebuild program using older CUDA/lower CCAP.
 
 Linux:
 
