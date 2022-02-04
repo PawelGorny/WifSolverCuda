@@ -40,7 +40,7 @@ size_t wifLen = 53;
 int dataLen = 37;
 
 bool COMPRESSED = false;
-Int STRIDE, RANGE_START, RANGE_END;
+Int STRIDE, RANGE_START, RANGE_END, RANGE_START_TOTAL, RANGE_TOTAL;
 Int loopStride;
 Int counter;
 string TARGET_ADDRESS = "";
@@ -66,7 +66,7 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.4.4\n\n");
+    printf("WifSolver 0.4.5\n\n");
 
     if (readArgs(argc, argv)) {
         showHelp(); 
@@ -293,7 +293,11 @@ void printSpeed(double speed) {
             }
         }
     }
-    printf("\r %s       ", speedStr.c_str());
+    Int processedCount = new Int(RANGE_START);
+    processedCount.Sub(&RANGE_START_TOTAL);
+    processedCount.Mult(100);
+    processedCount.Div(&RANGE_TOTAL);
+    printf("\r %s,  progress: %s%%     ", speedStr.c_str(), processedCount.GetBase10().c_str());
     fflush(stdout);
 }
 
@@ -524,6 +528,9 @@ bool readArgs(int argc, char** argv) {
         }
     }
     dataLen = COMPRESSED ? 38 : 37;
+    RANGE_START_TOTAL.Set(&RANGE_START);
+    RANGE_TOTAL.Set(&RANGE_END);
+    RANGE_TOTAL.Sub(&RANGE_START_TOTAL);
     return false;
 }
 
