@@ -400,7 +400,7 @@ void printSpeed(double speed) {
             }
         }
     }
-    Int processedCount = new Int(RANGE_START);
+    Int processedCount = new Int(&RANGE_START);
     processedCount.Sub(&RANGE_START_TOTAL);
     processedCount.Mult(100);
     processedCount.Div(&RANGE_TOTAL);
