@@ -22,11 +22,13 @@ void processCandidate(Int& toTest);
 bool readArgs(int argc, char** argv);
 void showHelp();
 bool checkDevice();
+void listDevices();
 void printConfig();
 void printFooter();
 void decodeWif();
 void printSpeed(double speed);
-void saveStatus(Int& _start);
+void saveStatus();
+void restoreSettings(string fileStatusRestore);
 
 cudaError_t processCuda();
 
@@ -34,7 +36,7 @@ cudaError_t processCuda();
 int DEVICE_NR = 0;
 unsigned int BLOCK_THREADS = 0;
 unsigned int BLOCK_NUMBER = 0;
-unsigned int THREAD_STEPS = 3364;
+unsigned int THREAD_STEPS = 1682;
 
 size_t wifLen = 53;
 int dataLen = 37;
@@ -60,6 +62,10 @@ string fileResultPartial = "result_partial.txt";
 string fileResult = "result.txt";
 string fileStatus = "fileStatus.txt";
 int fileStatusInterval = 60;
+string fileStatusRestore;
+bool isRestore = false;
+
+bool showDevices = false;
 
 Secp256K1* secp;
 
@@ -73,12 +79,23 @@ int main(int argc, char** argv)
         printFooter();
         return 0;
     }
-
+    if (showDevices) {
+        listDevices();
+        return 0;
+    }
     if (DECODE) {
         decodeWif();
         printFooter();
         return 0;
     }
+    if (isRestore) {
+        restoreSettings(fileStatusRestore);
+    }   
+
+    dataLen = COMPRESSED ? 38 : 37;
+    RANGE_START_TOTAL.Set(&RANGE_START);
+    RANGE_TOTAL.Set(&RANGE_END);
+    RANGE_TOTAL.Sub(&RANGE_START_TOTAL);
 
     if (!checkDevice()) {
         return -1;
@@ -243,7 +260,7 @@ cudaError_t processCuda() {
             beginCountHashrate = std::chrono::steady_clock::now();
         }
         if (tStatus > fileStatusInterval) {
-            saveStatus(RANGE_START);
+            saveStatus();
             beginCountStatus = std::chrono::steady_clock::now();
         }
     }//while
@@ -256,9 +273,81 @@ Error:
     return cudaStatus;
 }
 
-void saveStatus(Int& _start) {
-    FILE* stat = fopen(fileStatus.c_str(), "w");
-    fprintf(stat, "%s\n", RANGE_START.GetBase16().c_str());
+void restoreSettings(string fileStatusRestore) {
+    const int lineLength = 128;
+    char line[lineLength];
+    FILE* stat = fopen(fileStatusRestore.c_str(), "r");    
+    if (stat == NULL) {
+        return;
+    }
+    while (fgets(line, 128, stat)) {
+        string s = string(line);
+        std::string prefix("-rangeStart=");
+        if (s.rfind(prefix, 0) == 0) {
+            RANGE_START.SetBase16((char*)s.substr(prefix.size(), s.size() - prefix.size() - 1).c_str());
+            continue;
+        }
+        prefix = string("-rangeEnd=");
+        if (s.rfind(prefix, 0) == 0) {
+            RANGE_END.SetBase16((char*)s.substr(prefix.size(), s.size() - prefix.size() - 1).c_str());
+            continue;
+        }
+        prefix = string("-stride=");
+        if (s.rfind(prefix, 0) == 0) {
+            STRIDE.SetBase16((char*)s.substr(prefix.size(), s.size() - prefix.size() - 1).c_str());
+            continue;
+        }
+        prefix = string("-a=");
+        if (s.rfind(prefix, 0) == 0) {
+            TARGET_ADDRESS = s.substr(prefix.size(), s.size() - prefix.size() - 1);
+            continue;
+        }
+        prefix = string("-b=");
+        if (s.rfind(prefix, 0) == 0) {
+            BLOCK_NUMBER = strtol(s.substr(prefix.size(), s.size() - prefix.size() - 1).c_str(), NULL, 10);
+            continue;
+        }
+        prefix = string("-t=");
+        if (s.rfind(prefix, 0) == 0) {
+            BLOCK_THREADS = strtol(s.substr(prefix.size(), s.size() - prefix.size() - 1).c_str(), NULL, 10);
+            continue;
+        }
+        prefix = string("-s=");
+        if (s.rfind(prefix, 0) == 0) {
+            THREAD_STEPS = strtol(s.substr(prefix.size(), s.size() - prefix.size() - 1).c_str(), NULL, 10);
+            continue;
+        }
+        prefix = string("-checksum=");
+        if (s.rfind(prefix, 0) == 0) {
+            string chxsum = s.substr(prefix.size(), s.size() - prefix.size() - 1);
+            if (!chxsum.empty()) {
+                CHECKSUM.SetBase16((char*)s.substr(prefix.size(), s.size() - prefix.size() - 1).c_str());
+                IS_CHECKSUM = true;
+            }
+            else {
+                IS_CHECKSUM = false;
+            }
+            continue;
+        }
+        prefix = string("-c");
+        if (s.rfind(prefix) == 0) {
+            COMPRESSED = true;
+            continue;
+        }
+        prefix = string("-u");
+        if (s.rfind(prefix) == 0) {
+            COMPRESSED = false;
+            continue;
+        }
+    }
+    fclose(stat);
+}
+
+void saveStatus() {
+    FILE* stat = fopen(fileStatus.c_str(), "w");    
+    auto time = std::chrono::system_clock::now();
+    std::time_t s_time = std::chrono::system_clock::to_time_t(time);
+    fprintf(stat, "%s\n", std::ctime(&s_time));    
     char wif[53];
     unsigned char* buff = new unsigned char[dataLen];
     for (int i = 0, d = dataLen - 1; i < dataLen; i++, d--) {
@@ -267,9 +356,27 @@ void saveStatus(Int& _start) {
     if (b58encode(wif, &wifLen, buff, dataLen)) {
         fprintf(stat, "%s\n", wif);
     }
-    auto time = std::chrono::system_clock::now();
-    std::time_t s_time = std::chrono::system_clock::to_time_t(time);
-    fprintf(stat, "%s\n", std::ctime(&s_time));
+    fprintf(stat, "-rangeStart=%s\n", RANGE_START.GetBase16().c_str());
+    fprintf(stat, "-rangeEnd=%s\n", RANGE_END.GetBase16().c_str());
+    fprintf(stat, "-stride=%s\n", STRIDE.GetBase16().c_str());
+    if (!TARGET_ADDRESS.empty()) {
+        fprintf(stat, "-a=%s\n", TARGET_ADDRESS.c_str());
+    }else {
+        fprintf(stat, "-a=\n");
+    }
+    if (IS_CHECKSUM) {
+        fprintf(stat, "-checksum=%s\n", CHECKSUM.GetBase16().c_str());
+    }else {
+        fprintf(stat, "-checksum=\n");
+    }
+    if (COMPRESSED) {
+        fprintf(stat, "-c\n");
+    }else {
+        fprintf(stat, "-u\n");
+    }
+    fprintf(stat, "-b=%d\n", BLOCK_NUMBER);
+    fprintf(stat, "-t=%d\n", BLOCK_THREADS);
+    fprintf(stat, "-s=%d\n", THREAD_STEPS);
     fclose(stat);
 }
 
@@ -401,7 +508,10 @@ void showHelp() {
     printf("WifSolverCuda [-d deviceId] [-b NbBlocks] [-t NbThreads] [-s NbThreadChecks]\n");
     printf("    [-fresultp reportFile] [-fresult resultFile] [-fstatus statusFile] [-a targetAddress]\n");
     printf("    -stride hexKeyStride -rangeStart hexKeyStart [-rangeEnd hexKeyEnd] [-checksum hexChecksum] \n");
-    printf("    [-decode wifToDecode] \n\n");
+    printf("    [-decode wifToDecode] \n");
+    printf("    [-restore statusFile] \n");
+    printf("    [-listDevices] \n");
+    printf("    [-h] \n\n");
     printf("-rangeStart hexKeyStart: decoded initial key with compression flag and checksum \n");
     printf("-rangeEnd hexKeyEnd:     decoded end key with compression flag and checksum \n");
     printf("-checksum hexChecksum:   decoded checksum, cannot be modified with a stride  \n");
@@ -416,10 +526,10 @@ void showHelp() {
     printf("-u :                     search for uncompressed address (default)\n");
     printf("-b NbBlocks:             default processorCount * 8\n");
     printf("-t NbThreads:            default deviceMax/8 * 5\n");
-    printf("-s NbThreadChecks:       default 3364\n");    
-    printf("\n");
-    printf("-decode wifToDecode:     decodes given WIF\n");
-    printf("\n");
+    printf("-s NbThreadChecks:       default %d\n", THREAD_STEPS);
+    printf("-decode wifToDecode:     decodes given WIF\n");    
+    printf("-restore statusFile:     restore work configuration\n");
+    printf("-listDevices:            shows available devices\n");
     printf("-h :                     shows help\n");
 }
  
@@ -432,10 +542,20 @@ bool readArgs(int argc, char** argv) {
         if (strcmp(argv[a], "-h") == 0) {
             return true;
         }else
+        if (strcmp(argv[a], "-restore") == 0) {
+            a++;
+            fileStatusRestore = string(argv[a]);
+            isRestore = true;
+            return false;
+        }else
         if (strcmp(argv[a], "-decode") == 0) {
             a++;
             WIF_TO_DECODE = string(argv[a]);
             DECODE = true;
+            return false;
+        }
+        else if (strcmp(argv[a], "-listDevices") == 0) {
+            showDevices = true;
             return false;
         }
         else if (strcmp(argv[a], "-d") == 0) {
@@ -526,11 +646,7 @@ bool readArgs(int argc, char** argv) {
         else {
             STRIDE.SetBase16((char*)string("100000000").c_str());
         }
-    }
-    dataLen = COMPRESSED ? 38 : 37;
-    RANGE_START_TOTAL.Set(&RANGE_START);
-    RANGE_TOTAL.Set(&RANGE_END);
-    RANGE_TOTAL.Sub(&RANGE_START_TOTAL);
+    }    
     return false;
 }
 
@@ -546,4 +662,17 @@ void decodeWif() {
         printf("%.2x", keybuf[i]);
     }
     printf("\n\n");
+}
+
+void listDevices() {
+    int nDevices;
+    cudaGetDeviceCount(&nDevices);
+    for (int i = 0; i < nDevices; i++) {
+        cudaDeviceProp prop;
+        cudaGetDeviceProperties(&prop, i);
+        printf("Device Number: %d\n", i);
+        printf("  %s\n", prop.name);
+        printf("  %2d procs\n", prop.multiProcessorCount);
+        printf("  maxThreadsPerBlock: %2d\n\n", prop.maxThreadsPerBlock);
+    }
 }

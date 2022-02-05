@@ -7,6 +7,9 @@ Usage:
          [-fresultp reportFile] [-fresult resultFile] [-fstatus statusFile] [-a targetAddress]
          -stride hexKeyStride -rangeStart hexKeyStart [-rangeEnd hexKeyEnd] [-checksum hexChecksum] 
          [-decode wifToDecode]
+         [-restore statusFile]
+         [-listDevices]
+         [-h]
 
      -rangeStart hexKeyStart: decoded initial key with compression flag and checksum
      -rangeEnd hexKeyEnd:     decoded end key with compression flag and checksum
@@ -23,9 +26,9 @@ Usage:
      -b NbBlocks:             default processorCount * 8
      -t NbThreads:            default deviceMax/8 * 5
      -s NbThreadChecks:       default 3364
-
      -decode wifToDecode:     decodes given WIF
-
+     -restore statusFile:     restore work configuration
+     -listDevices:            shows available devices
      -h :     shows help
      
 
