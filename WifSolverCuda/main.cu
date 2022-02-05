@@ -43,6 +43,7 @@ int dataLen = 37;
 
 bool COMPRESSED = false;
 Int STRIDE, RANGE_START, RANGE_END, RANGE_START_TOTAL, RANGE_TOTAL;
+double RANGE_TOTAL_DOUBLE;
 Int loopStride;
 Int counter;
 string TARGET_ADDRESS = "";
@@ -96,6 +97,7 @@ int main(int argc, char** argv)
     RANGE_START_TOTAL.Set(&RANGE_START);
     RANGE_TOTAL.Set(&RANGE_END);
     RANGE_TOTAL.Sub(&RANGE_START_TOTAL);
+    RANGE_TOTAL_DOUBLE = RANGE_TOTAL.ToDouble();
 
     if (!checkDevice()) {
         return -1;
@@ -400,18 +402,14 @@ void printSpeed(double speed) {
             }
         }
     }
-    /*
-    * todo
-    printf("RANGE_START %s\n", RANGE_START.GetBase16().c_str());
-    printf("RANGE_START_TOTAL %s\n", RANGE_START_TOTAL.GetBase16().c_str());
-    printf("RANGE_TOTAL %s\n", RANGE_TOTAL.GetBase16().c_str());
-    Int processedCount = new Int(&RANGE_START);
+
+    Int processedCount= new Int(&RANGE_START);
     processedCount.Sub(&RANGE_START_TOTAL);
-    processedCount.Mult(100);
-    processedCount.Div(&RANGE_TOTAL);
-    printf("\r %s,  progress: %s%%     ", speedStr.c_str(), processedCount.GetBase10().c_str());
-    */
-    printf("\r %s,    ", speedStr.c_str()); 
+    double _count = processedCount.ToDouble(); 
+    _count = _count / RANGE_TOTAL_DOUBLE;
+    _count *= 100;
+    printf("\r %s,  progress: %.3f%%     ", speedStr.c_str(), _count);    
+    //printf("\r %s,    ", speedStr.c_str()); 
     fflush(stdout);
 }
 
