@@ -29,7 +29,7 @@ Usage:
      -decode wifToDecode:     decodes given WIF
      -restore statusFile:     restore work configuration
      -listDevices:            shows available devices
-     -h :     shows help
+     -h :                     shows help
      
 
 Program could search for given address or search for any valid WIF with a given configuration. 
