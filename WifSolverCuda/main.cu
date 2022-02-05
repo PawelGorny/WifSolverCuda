@@ -400,11 +400,18 @@ void printSpeed(double speed) {
             }
         }
     }
+    /*
+    * todo
+    printf("RANGE_START %s\n", RANGE_START.GetBase16().c_str());
+    printf("RANGE_START_TOTAL %s\n", RANGE_START_TOTAL.GetBase16().c_str());
+    printf("RANGE_TOTAL %s\n", RANGE_TOTAL.GetBase16().c_str());
     Int processedCount = new Int(&RANGE_START);
     processedCount.Sub(&RANGE_START_TOTAL);
     processedCount.Mult(100);
     processedCount.Div(&RANGE_TOTAL);
     printf("\r %s,  progress: %s%%     ", speedStr.c_str(), processedCount.GetBase10().c_str());
+    */
+    printf("\r %s,    ", speedStr.c_str()); 
     fflush(stdout);
 }
 
