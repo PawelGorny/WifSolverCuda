@@ -72,15 +72,23 @@ __global__ void kernelCompressed(bool* buffResult, bool* buffCollectorWork, uint
 }
 
 __global__ void resultCollector(bool* buffResult, uint64_t* buffCombinedResult, const uint64_t threadsInBlockNumberOfChecks) {
-    int64_t tIx = blockIdx.x * blockDim.x ;
-    buffCombinedResult[blockIdx.x] = 0xffffffffffff;
-    for (uint64_t i = 0, resultIx = tIx * threadsInBlockNumberOfChecks; i < threadsInBlockNumberOfChecks; i++, resultIx++) {
+    if (buffCombinedResult[blockIdx.x] == 0xffffffffffff) {
+        return;
+    }
+    int64_t tIx = blockIdx.x * blockDim.x ;   
+    uint64_t starterI = 0, starter = tIx * threadsInBlockNumberOfChecks;
+    if (buffCombinedResult[blockIdx.x] != 0) {
+        starterI = buffCombinedResult[blockIdx.x] - starter + 1;
+        starter = buffCombinedResult[blockIdx.x] + 1;
+    }
+    for (uint64_t i = starterI, resultIx = starter; i < threadsInBlockNumberOfChecks; i++, resultIx++) {
         if (buffResult[resultIx]) {
             buffCombinedResult[blockIdx.x] = resultIx;
             buffResult[resultIx] = false;
             return;
         }
     }
+    buffCombinedResult[blockIdx.x] = 0xffffffffffff;
 }
 
 __device__ bool _checksumDoubleSha256CheckCompressed(unsigned int checksum, beu32* d_hash, uint64_t* _start) {

@@ -73,7 +73,7 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.4.5\n\n");
+    printf("WifSolver 0.4.6\n\n");
 
     if (readArgs(argc, argv)) {
         showHelp(); 
@@ -204,6 +204,12 @@ cudaError_t processCuda() {
             bool anyResult = buffCollectorWork[0];
             buffCollectorWork[0] = false;
             cudaStatus = cudaMemcpyAsync(dev_buffCollectorWork, buffCollectorWork, 1 * sizeof(bool), cudaMemcpyHostToDevice);
+            if (anyResult) {
+                for (int i = 0; i < COLLECTOR_SIZE; i++) {
+                    buffResult[i] = 0;
+                }
+                cudaStatus = cudaMemcpy(dev_buffResult, buffResult, COLLECTOR_SIZE * sizeof(uint64_t), cudaMemcpyHostToDevice);
+            }
             while (anyResult && !RESULT) {
                 resultCollector << <BLOCK_NUMBER, 1 >> > (dev_buffDeviceResult, dev_buffResult, THREAD_STEPS * BLOCK_THREADS);
                 cudaStatus = cudaGetLastError();
