@@ -73,7 +73,7 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.4.6\n\n");
+    printf("WifSolver 0.4.7\n\n");
 
     if (readArgs(argc, argv)) {
         showHelp(); 
@@ -137,6 +137,8 @@ cudaError_t processCuda() {
 
     __Load(buffStride, STRIDE.bits64);
     loadStride(buffStride);
+    delete buffStride;
+
 
     bool* buffDeviceResult = new bool[outputSize];
     bool* dev_buffDeviceResult = new bool[outputSize];
@@ -144,8 +146,10 @@ cudaError_t processCuda() {
         buffDeviceResult[i] = false;
     }
     cudaStatus = cudaMalloc((void**)&dev_buffDeviceResult, outputSize * sizeof(bool));
-    cudaStatus = cudaMemcpyAsync(dev_buffDeviceResult, buffDeviceResult, outputSize * sizeof(bool), cudaMemcpyHostToDevice);       
+    cudaStatus = cudaMemcpy(dev_buffDeviceResult, buffDeviceResult, outputSize * sizeof(bool), cudaMemcpyHostToDevice);       
         
+    delete buffDeviceResult;
+
     uint64_t* buffResult = new uint64_t[COLLECTOR_SIZE];
     uint64_t* dev_buffResult = new uint64_t[COLLECTOR_SIZE];
     cudaStatus = cudaMalloc((void**)&dev_buffResult, COLLECTOR_SIZE * sizeof(uint64_t));
@@ -165,7 +169,7 @@ cudaError_t processCuda() {
         
     std::chrono::steady_clock::time_point beginCountHashrate = std::chrono::steady_clock::now();
     std::chrono::steady_clock::time_point beginCountStatus = std::chrono::steady_clock::now();
-    
+   
     while (!RESULT && RANGE_START.IsLower(&RANGE_END)) {
 
         //prepare launch
@@ -198,7 +202,7 @@ cudaError_t processCuda() {
             goto Error;
         }
 
-        if (useCollector) {
+        //if (useCollector) {
             //summarize results            
             cudaStatus = cudaMemcpy(buffCollectorWork, dev_buffCollectorWork, 1 * sizeof(bool), cudaMemcpyDeviceToHost);
             bool anyResult = buffCollectorWork[0];
@@ -239,8 +243,8 @@ cudaError_t processCuda() {
                     }
                 }
             }
-        }
-        else {
+        //}
+        /*else {
             //pure output, for debug 
             cudaStatus = cudaMemcpy(buffDeviceResult, dev_buffDeviceResult, outputSize * sizeof(bool), cudaMemcpyDeviceToHost);
             if (cudaStatus != cudaSuccess) {
@@ -256,7 +260,7 @@ cudaError_t processCuda() {
                     processCandidate(toTest);
                 }
             }
-        }       
+        } */      
         RANGE_START.Add(&loopStride);
         counter += outputSize;
         int64_t tHash = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - beginCountHashrate).count();

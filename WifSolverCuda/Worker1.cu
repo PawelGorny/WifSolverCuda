@@ -75,8 +75,7 @@ __global__ void resultCollector(bool* buffResult, uint64_t* buffCombinedResult, 
     if (buffCombinedResult[blockIdx.x] == 0xffffffffffff) {
         return;
     }
-    int64_t tIx = blockIdx.x * blockDim.x ;   
-    uint64_t starterI = 0, starter = tIx * threadsInBlockNumberOfChecks;
+    uint64_t starterI = 0, starter = blockIdx.x * blockDim.x * threadsInBlockNumberOfChecks;
     if (buffCombinedResult[blockIdx.x] != 0) {
         starterI = buffCombinedResult[blockIdx.x] - starter + 1;
         starter = buffCombinedResult[blockIdx.x] + 1;
