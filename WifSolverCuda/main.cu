@@ -67,13 +67,14 @@ string fileStatusRestore;
 bool isRestore = false;
 
 bool showDevices = false;
+bool p2sh = false;
 
 Secp256K1* secp;
 
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.4.7\n\n");
+    printf("WifSolver 0.4.8\n\n");
 
     if (readArgs(argc, argv)) {
         showHelp(); 
@@ -432,8 +433,13 @@ void processCandidate(Int &toTest) {
     }       
     toTest.SetBase16((char*)toTest.GetBase16().substr(2, 64).c_str());        
     Point publickey = secp->ComputePublicKey(&toTest);        
-    secp->GetHash160(P2PKH, COMPRESSED, publickey, (unsigned char*)rmdhash);
-    addressToBase58(rmdhash, address);    
+    if (p2sh) {
+        secp->GetHash160(P2SH, true, publickey, (unsigned char*)rmdhash);
+    }
+    else {
+        secp->GetHash160(P2PKH, COMPRESSED, publickey, (unsigned char*)rmdhash);
+    }
+    addressToBase58(rmdhash, address, p2sh);    
     if (!TARGET_ADDRESS.empty()) {
         if (TARGET_ADDRESS == address) {
             RESULT = true;            
@@ -629,6 +635,9 @@ bool readArgs(int argc, char** argv) {
         else if (strcmp(argv[a], "-a") == 0) {
             a++;
             TARGET_ADDRESS = string(argv[a]);
+            if (argv[a][0] == '3') {
+                p2sh = true;
+            }
         }
         else if (strcmp(argv[a], "-checksum") == 0) {
             a++;

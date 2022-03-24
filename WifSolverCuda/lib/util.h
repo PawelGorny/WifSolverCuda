@@ -32,7 +32,7 @@ int isValidHex(char* data);
 void freetokenizer(Tokenizer* t);
 void stringtokenizer(char* data, Tokenizer* t);
 
-void addressToBase58(char* rmd, char* dst);
+void addressToBase58(char* rmd, char* dst, bool p2sh);
 
 std::string formatDouble(const char* formatStr, double value);
 

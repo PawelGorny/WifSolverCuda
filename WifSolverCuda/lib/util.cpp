@@ -182,10 +182,15 @@ int isValidHex(char* data) {
 	return valid;
 }
 
-void addressToBase58(char* rmd, char* dst) {
+void addressToBase58(char* rmd, char* dst, bool p2sh) {
 	char digest[60];
 	size_t pubaddress_size = 40;
-	digest[0] = 0x00;
+	if (p2sh) {
+		digest[0] = 0x05;
+	}
+	else {
+		digest[0] = 0x00;
+	}
 	memcpy(digest + 1, rmd, 20);
 	sha256((uint8_t*)digest, 21, (uint8_t*)digest + 21);
 	sha256((uint8_t*)digest + 21, 32, (uint8_t*)digest + 21);
