@@ -15,7 +15,6 @@
 
 #include "lib/SECP256k1.h"
 
-
 using namespace std;
 
 void processCandidate(Int& toTest);
@@ -31,7 +30,6 @@ void saveStatus();
 void restoreSettings(string fileStatusRestore);
 
 cudaError_t processCuda();
-
 
 int DEVICE_NR = 0;
 unsigned int BLOCK_THREADS = 0;
@@ -74,7 +72,8 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.4.8\n\n");
+    printf("WifSolver 0.4.9\n\n");
+    printf("Use parameter '-h' for help and list of available parameters\n\n");
 
     if (readArgs(argc, argv)) {
         showHelp(); 
@@ -83,6 +82,7 @@ int main(int argc, char** argv)
     }
     if (showDevices) {
         listDevices();
+        printFooter();
         return 0;
     }
     if (DECODE) {
@@ -167,15 +167,18 @@ cudaError_t processCuda() {
     const uint32_t expectedChecksum = IS_CHECKSUM ? CHECKSUM.GetInt32() : 0;
 
     uint64_t counter = 0;
-        
+    bool anyResult = false;
+
+    size_t RANGE_TRANSFER_SIZE = NB64BLOCK * sizeof(uint64_t);
+    size_t COLLECTOR_TRANSFER_SIZE = COLLECTOR_SIZE * sizeof(uint64_t);
+
     std::chrono::steady_clock::time_point beginCountHashrate = std::chrono::steady_clock::now();
     std::chrono::steady_clock::time_point beginCountStatus = std::chrono::steady_clock::now();
-   
-    while (!RESULT && RANGE_START.IsLower(&RANGE_END)) {
 
+    while (!RESULT && RANGE_START.IsLower(&RANGE_END)) {
         //prepare launch
         __Load(buffRangeStart, RANGE_START.bits64);
-        cudaStatus = cudaMemcpy(dev_buffRangeStart, buffRangeStart, NB64BLOCK * sizeof(uint64_t), cudaMemcpyHostToDevice);
+        cudaStatus = cudaMemcpy(dev_buffRangeStart, buffRangeStart, RANGE_TRANSFER_SIZE, cudaMemcpyHostToDevice);
         //launch work
         if (COMPRESSED) {
             if (IS_CHECKSUM) {
@@ -205,45 +208,46 @@ cudaError_t processCuda() {
 
         //if (useCollector) {
             //summarize results            
-            cudaStatus = cudaMemcpy(buffCollectorWork, dev_buffCollectorWork, 1 * sizeof(bool), cudaMemcpyDeviceToHost);
-            bool anyResult = buffCollectorWork[0];
-            buffCollectorWork[0] = false;
-            cudaStatus = cudaMemcpyAsync(dev_buffCollectorWork, buffCollectorWork, 1 * sizeof(bool), cudaMemcpyHostToDevice);
-            if (anyResult) {
+            cudaStatus = cudaMemcpy(buffCollectorWork, dev_buffCollectorWork, sizeof(bool), cudaMemcpyDeviceToHost);                      
+            if (buffCollectorWork[0]) {
+                anyResult = true;
+                buffCollectorWork[0] = false;                
+                cudaStatus = cudaMemcpyAsync(dev_buffCollectorWork, buffCollectorWork, sizeof(bool), cudaMemcpyHostToDevice);            
                 for (int i = 0; i < COLLECTOR_SIZE; i++) {
                     buffResult[i] = 0;
                 }
-                cudaStatus = cudaMemcpy(dev_buffResult, buffResult, COLLECTOR_SIZE * sizeof(uint64_t), cudaMemcpyHostToDevice);
-            }
-            while (anyResult && !RESULT) {
-                resultCollector << <BLOCK_NUMBER, 1 >> > (dev_buffDeviceResult, dev_buffResult, THREAD_STEPS * BLOCK_THREADS);
-                cudaStatus = cudaGetLastError();
-                if (cudaStatus != cudaSuccess) {
-                    fprintf(stderr, "kernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
-                    goto Error;
-                }
-                cudaStatus = cudaDeviceSynchronize();
-                if (cudaStatus != cudaSuccess) {
-                    fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching kernel!\n", cudaStatus);
-                    goto Error;
-                }
-                cudaStatus = cudaMemcpy(buffResult, dev_buffResult, COLLECTOR_SIZE * sizeof(uint64_t), cudaMemcpyDeviceToHost);
-                if (cudaStatus != cudaSuccess) {
-                    fprintf(stderr, "cudaMemcpy failed!");
-                    goto Error;
-                }
-                anyResult = false;
-                for (int i = 0; i < COLLECTOR_SIZE; i++) {
-                    if (buffResult[i] != 0xffffffffffff) {
-                        Int toTest = new Int(&RANGE_START);
-                        Int diff = new Int(&STRIDE);
-                        diff.Mult(buffResult[i]);
-                        toTest.Add(&diff);
-                        processCandidate(toTest);   
-                        anyResult = true;
+                cudaStatus = cudaMemcpy(dev_buffResult, buffResult, COLLECTOR_TRANSFER_SIZE, cudaMemcpyHostToDevice);
+                while (anyResult && !RESULT) {
+                    resultCollector << <BLOCK_NUMBER, 1 >> > (dev_buffDeviceResult, dev_buffResult, THREAD_STEPS * BLOCK_THREADS);
+                    cudaStatus = cudaGetLastError();
+                    if (cudaStatus != cudaSuccess) {
+                        fprintf(stderr, "kernel 'resultCollector' launch failed: %s\n", cudaGetErrorString(cudaStatus));
+                        goto Error;
                     }
-                }
-            }
+                    cudaStatus = cudaDeviceSynchronize();
+                    if (cudaStatus != cudaSuccess) {
+                        fprintf(stderr, "cudaDeviceSynchronize 'resultCollector' returned error code %d after launching kernel!\n", cudaStatus);
+                        goto Error;
+                    }
+                    cudaStatus = cudaMemcpy(buffResult, dev_buffResult, COLLECTOR_TRANSFER_SIZE, cudaMemcpyDeviceToHost);
+                    if (cudaStatus != cudaSuccess) {
+                        fprintf(stderr, "cudaMemcpy failed!");
+                        goto Error;
+                    }
+                    anyResult = false;
+
+                    for (int i = 0; i < COLLECTOR_SIZE; i++) {
+                        if (buffResult[i] != 0xffffffffffff) {
+                            Int toTest = new Int(&RANGE_START);
+                            Int diff = new Int(&STRIDE);
+                            diff.Mult(buffResult[i]);
+                            toTest.Add(&diff);
+                            processCandidate(toTest);
+                            anyResult = true;
+                        }
+                    }
+                }//while
+            }//anyResult to test
         //}
         /*else {
             //pure output, for debug 
@@ -265,14 +269,14 @@ cudaError_t processCuda() {
         RANGE_START.Add(&loopStride);
         counter += outputSize;
         int64_t tHash = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - beginCountHashrate).count();
-        int64_t tStatus = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - beginCountStatus).count();
+        //int64_t tStatus = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - beginCountStatus).count();
         if (tHash > 5) {
             double speed = (double)((double)counter / tHash) / 1000000.0;
             printSpeed(speed);            
             counter = 0;
             beginCountHashrate = std::chrono::steady_clock::now();
         }
-        if (tStatus > fileStatusInterval) {
+        if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - beginCountStatus).count() > fileStatusInterval) {
             saveStatus();
             beginCountStatus = std::chrono::steady_clock::now();
         }
@@ -476,6 +480,9 @@ void printConfig() {
     printf("Range start: %s\n", RANGE_START.GetBase16().c_str());
     printf("Range end  : %s\n", RANGE_END.GetBase16().c_str());
     printf("Stride     : %s\n", STRIDE.GetBase16().c_str());
+    if (IS_CHECKSUM) {
+        printf("Checksum   : %s\n", CHECKSUM.GetBase16().c_str());
+    }
     if (!TARGET_ADDRESS.empty()) {
         printf( "Target     : %s\n", TARGET_ADDRESS.c_str());
     }
@@ -483,10 +490,7 @@ void printConfig() {
         printf("Target COMPRESSED\n");
     }    else    {
         printf("Target UNCOMPRESSED\n");
-    }   
-    if (IS_CHECKSUM) {
-        printf("Checksum   : %s\n", CHECKSUM.GetBase16().c_str());
-    }
+    }       
     printf( "\n");
     printf( "number of blocks: %d\n", BLOCK_NUMBER);
     printf( "number of threads: %d\n", BLOCK_THREADS);
@@ -508,11 +512,12 @@ bool checkDevice() {
     else {
         cudaDeviceProp props;
         cudaStatus = cudaGetDeviceProperties(&props, DEVICE_NR);
-        printf("Using:\n");
+        printf("Using GPU nr %d:\n", DEVICE_NR);
         printf("%s (%2d procs)\n", props.name, props.multiProcessorCount);
         printf("maxThreadsPerBlock: %2d\n\n", props.maxThreadsPerBlock);
         if (BLOCK_NUMBER == 0) {
             BLOCK_NUMBER = props.multiProcessorCount * 8;
+            
         }
         if (BLOCK_THREADS == 0) {
             BLOCK_THREADS = (props.maxThreadsPerBlock / 8) * 5;
@@ -588,6 +593,9 @@ bool readArgs(int argc, char** argv) {
         }
         else if (strcmp(argv[a], "-u") == 0) {
             COMPRESSED = false;
+            if (p2sh) {
+                COMPRESSED = true;
+            }
         }
         else if (strcmp(argv[a], "-t") == 0) {
             a++;
@@ -637,6 +645,7 @@ bool readArgs(int argc, char** argv) {
             TARGET_ADDRESS = string(argv[a]);
             if (argv[a][0] == '3') {
                 p2sh = true;
+                COMPRESSED = true;
             }
         }
         else if (strcmp(argv[a], "-checksum") == 0) {
@@ -697,6 +706,7 @@ void listDevices() {
         printf("Device Number: %d\n", i);
         printf("  %s\n", prop.name);
         printf("  %2d procs\n", prop.multiProcessorCount);
-        printf("  maxThreadsPerBlock: %2d\n\n", prop.maxThreadsPerBlock);
+        printf("  maxThreadsPerBlock: %2d\n", prop.maxThreadsPerBlock);
+        printf("  version majorminor: %d%d\n\n", prop.major, prop.minor);
     }
 }
