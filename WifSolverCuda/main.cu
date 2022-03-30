@@ -30,11 +30,14 @@ void saveStatus();
 void restoreSettings(string fileStatusRestore);
 
 cudaError_t processCuda();
+cudaError_t processCudaUnified();
+
+bool unifiedMemory = true;
 
 int DEVICE_NR = 0;
 unsigned int BLOCK_THREADS = 0;
 unsigned int BLOCK_NUMBER = 0;
-unsigned int THREAD_STEPS = 1682;
+unsigned int THREAD_STEPS = 5000;
 
 size_t wifLen = 53;
 int dataLen = 37;
@@ -52,8 +55,6 @@ bool DECODE = false;
 string WIF_TO_DECODE;
 
 bool RESULT = false;
-bool useCollector = false;
-uint64_t collectorLimit = 100;
 
 uint64_t outputSize;
 
@@ -72,7 +73,7 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.4.9\n\n");
+    printf("WifSolver 0.5.0\n\n");
     printf("Use parameter '-h' for help and list of available parameters\n\n");
 
     if (readArgs(argc, argv)) {
@@ -112,7 +113,13 @@ int main(int argc, char** argv)
     std::time_t s_time = std::chrono::system_clock::to_time_t(time);
     std::cout << "Work started at " << std::ctime(&s_time);
 
-    cudaError_t cudaStatus = processCuda();
+    cudaError_t cudaStatus;
+    if (unifiedMemory) {
+        cudaStatus = processCudaUnified();
+    }
+    else {
+        cudaStatus = processCuda();
+    }
     
     time = std::chrono::system_clock::now();
     s_time = std::chrono::system_clock::to_time_t(time);
@@ -126,6 +133,112 @@ int main(int argc, char** argv)
 
     printFooter();
     return 0;
+}
+
+cudaError_t processCudaUnified() {
+    cudaError_t cudaStatus;
+    uint64_t* buffRangeStart = new uint64_t[NB64BLOCK];
+    uint64_t* dev_buffRangeStart = new uint64_t[NB64BLOCK];
+    uint64_t* buffStride = new uint64_t[NB64BLOCK];
+
+    const size_t RANGE_TRANSFER_SIZE = NB64BLOCK * sizeof(uint64_t);
+    const int COLLECTOR_SIZE_MM = 4 * BLOCK_NUMBER * BLOCK_THREADS;
+    const uint32_t expectedChecksum = IS_CHECKSUM ? CHECKSUM.GetInt32() : 0;
+    uint64_t counter = 0;
+
+    __Load(buffStride, STRIDE.bits64);
+    loadStride(buffStride);
+    delete buffStride;
+
+    uint32_t* buffResultManaged = new uint32_t[COLLECTOR_SIZE_MM];
+    cudaStatus = cudaMallocManaged(&buffResultManaged, COLLECTOR_SIZE_MM * sizeof(uint32_t));
+
+    for (int i = 0; i < COLLECTOR_SIZE_MM; i++) {
+        buffResultManaged[i] = UINT32_MAX;
+    }
+
+    bool* buffCollectorWork = new bool[1];
+    buffCollectorWork[0] = false;
+    bool* dev_buffCollectorWork = new bool[1];
+    cudaStatus = cudaMalloc((void**)&dev_buffCollectorWork, 1 * sizeof(bool));
+    cudaStatus = cudaMemcpy(dev_buffCollectorWork, buffCollectorWork, 1 * sizeof(bool), cudaMemcpyHostToDevice); 
+
+    cudaStatus = cudaMalloc((void**)&dev_buffRangeStart, NB64BLOCK * sizeof(uint64_t));
+
+    bool* buffIsResultManaged = new bool[1];
+    cudaStatus = cudaMallocManaged(&buffIsResultManaged, 1 * sizeof(bool));
+    buffIsResultManaged[0] = false;    
+
+    std::chrono::steady_clock::time_point beginCountHashrate = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point beginCountStatus = std::chrono::steady_clock::now();
+
+    while (!RESULT && RANGE_START.IsLower(&RANGE_END)) {
+        //prepare launch
+        __Load(buffRangeStart, RANGE_START.bits64);
+        cudaStatus = cudaMemcpy(dev_buffRangeStart, buffRangeStart, RANGE_TRANSFER_SIZE, cudaMemcpyHostToDevice);
+        //launch work
+        std::chrono::steady_clock::time_point beginKernel = std::chrono::steady_clock::now();
+        if (COMPRESSED) {
+            if (IS_CHECKSUM) {
+                kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (buffResultManaged, buffIsResultManaged, dev_buffRangeStart, THREAD_STEPS, expectedChecksum);
+            }
+            else {
+                kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (buffResultManaged, buffIsResultManaged, dev_buffRangeStart, THREAD_STEPS);
+            }
+        }
+        else {
+            if (IS_CHECKSUM) {
+                kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (buffResultManaged, buffIsResultManaged, dev_buffRangeStart, THREAD_STEPS, expectedChecksum);
+            }
+            else {
+                kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (buffResultManaged, buffIsResultManaged, dev_buffRangeStart, THREAD_STEPS);
+            }
+        }
+        cudaStatus = cudaGetLastError();
+        if (cudaStatus != cudaSuccess) {
+            fprintf(stderr, "kernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
+            goto Error;
+        }
+        cudaStatus = cudaDeviceSynchronize();
+        if (cudaStatus != cudaSuccess) {
+            fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching kernel!\n", cudaStatus);
+            goto Error;
+        }
+        int64_t tKernel = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - beginKernel).count();        
+        if (buffIsResultManaged[0]) {
+            buffIsResultManaged[0] = false;
+            for (int i = 0; i < COLLECTOR_SIZE_MM && !RESULT; i++) {
+                if (buffResultManaged[i] != UINT32_MAX) {
+                    Int toTest = new Int(&RANGE_START);
+                    Int diff = new Int(&STRIDE);
+                    diff.Mult(buffResultManaged[i]);
+                    toTest.Add(&diff);
+                    processCandidate(toTest);
+                    buffResultManaged[i] = UINT32_MAX;
+                }
+            }
+        }//test
+
+        RANGE_START.Add(&loopStride);
+        counter += outputSize;
+        int64_t tHash = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - beginCountHashrate).count();
+        if (tHash > 5) {
+            double speed = (double)((double)counter / tHash) / 1000000.0;
+            printSpeed(speed);
+            counter = 0;
+            beginCountHashrate = std::chrono::steady_clock::now();
+        }
+        if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - beginCountStatus).count() > fileStatusInterval) {
+            saveStatus();
+            beginCountStatus = std::chrono::steady_clock::now();
+        }
+    }//while
+
+Error:
+    cudaFree(dev_buffRangeStart);
+    cudaFree(dev_buffCollectorWork);
+    cudaFree(buffResultManaged);
+    return cudaStatus;
 }
 
 cudaError_t processCuda() {
@@ -513,11 +626,14 @@ bool checkDevice() {
         cudaDeviceProp props;
         cudaStatus = cudaGetDeviceProperties(&props, DEVICE_NR);
         printf("Using GPU nr %d:\n", DEVICE_NR);
+        if (props.canMapHostMemory == 0) {
+            printf("unified memory not supported\n");
+            unifiedMemory = 0;
+        }
         printf("%s (%2d procs)\n", props.name, props.multiProcessorCount);
-        printf("maxThreadsPerBlock: %2d\n\n", props.maxThreadsPerBlock);
+        printf("maxThreadsPerBlock: %2d\n\n", props.maxThreadsPerBlock);        
         if (BLOCK_NUMBER == 0) {
             BLOCK_NUMBER = props.multiProcessorCount * 8;
-            
         }
         if (BLOCK_THREADS == 0) {
             BLOCK_THREADS = (props.maxThreadsPerBlock / 8) * 5;
@@ -525,7 +641,6 @@ bool checkDevice() {
         outputSize = BLOCK_NUMBER * BLOCK_THREADS * THREAD_STEPS;
         loopStride = new Int(&STRIDE);
         loopStride.Mult(outputSize);
-        useCollector = outputSize >= collectorLimit;
     }
     return true;
 }
@@ -556,6 +671,7 @@ void showHelp() {
     printf("-decode wifToDecode:     decodes given WIF\n");    
     printf("-restore statusFile:     restore work configuration\n");
     printf("-listDevices:            shows available devices\n");
+    printf("-disable-um:             disable unified memory mode\n");
     printf("-h :                     shows help\n");
 }
  
@@ -653,6 +769,10 @@ bool readArgs(int argc, char** argv) {
             CHECKSUM.SetBase16((char*)string(argv[a]).c_str());
             IS_CHECKSUM = true;
         }
+        else if (strcmp(argv[a], "-disable-um") == 0) {
+            unifiedMemory = 0;
+            printf("unified memory mode disabled\n");
+        }
         a++;
     }    
 
@@ -705,6 +825,9 @@ void listDevices() {
         cudaGetDeviceProperties(&prop, i);
         printf("Device Number: %d\n", i);
         printf("  %s\n", prop.name);
+        if (prop.canMapHostMemory == 0) {
+            printf("  unified memory not supported\n");
+        }
         printf("  %2d procs\n", prop.multiProcessorCount);
         printf("  maxThreadsPerBlock: %2d\n", prop.maxThreadsPerBlock);
         printf("  version majorminor: %d%d\n\n", prop.major, prop.minor);

@@ -1,6 +1,8 @@
 #include "Worker.cuh"
 
 __device__ __constant__ uint64_t _stride[5];
+__device__ __shared__ uint32_t _blockResults[4096];
+__device__ __shared__ bool _blockResultFlag[1];
 
 __global__ void kernelUncompressed(bool* buffResult, bool* buffCollectorWork, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks, const uint32_t checksum) {
     uint64_t _start[5];
@@ -70,7 +72,6 @@ __global__ void kernelCompressed(bool* buffResult, bool* buffCollectorWork, uint
         _add(_start, _stride);
     }
 }
-
 __global__ void resultCollector(bool* buffResult, uint64_t* buffCombinedResult, const uint64_t threadsInBlockNumberOfChecks) {
     if (buffCombinedResult[blockIdx.x] == 0xffffffffffff) {
         return;
@@ -88,6 +89,129 @@ __global__ void resultCollector(bool* buffResult, uint64_t* buffCombinedResult, 
         }
     }
     buffCombinedResult[blockIdx.x] = 0xffffffffffff;
+}
+
+__global__ void kernelUncompressed(uint32_t* unifiedResult, bool* isResultFlag, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks, const uint32_t checksum) {
+    uint64_t _start[5];
+    beu32 d_hash[8];
+
+    int64_t resIx = threadIdx.x;
+    int64_t tIx = (threadIdx.x + blockIdx.x * blockDim.x) * threadNumberOfChecks;
+    IMult(_start, _stride, tIx);
+    _add(_start, buffRangeStart);
+    bool wasResult = false;
+    initShared();
+    for (uint64_t i = 0, resultIx = tIx; i < threadNumberOfChecks; i++, resultIx++) {
+        if (_checksumDoubleSha256CheckUncompressed(checksum, d_hash, _start)) {
+            _blockResults[resIx] = resultIx;
+            if (!wasResult) {
+                _blockResultFlag[0] = true;
+            }
+            wasResult = true;
+            resIx += blockDim.x;
+        }
+        _add(_start, _stride);
+    }
+    summaryShared(unifiedResult, isResultFlag);
+}
+__global__ void kernelUncompressed(uint32_t* unifiedResult, bool* isResultFlag, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks) {
+    uint64_t _start[5];
+    beu32 d_hash[8];
+
+    int64_t resIx = threadIdx.x;
+    int64_t tIx = (threadIdx.x + blockIdx.x * blockDim.x) * threadNumberOfChecks;
+    IMult(_start, _stride, tIx);
+    _add(_start, buffRangeStart);
+    bool wasResult = false;
+    initShared();
+    for (uint64_t i = 0, resultIx = tIx; i < threadNumberOfChecks; i++, resultIx++) {
+        if (_checksumDoubleSha256CheckUncompressed(_start[0] & 0xffffffff, d_hash, _start)) {
+            _blockResults[resIx] = resultIx;
+            if (!wasResult) {
+                _blockResultFlag[0] = true;
+            }
+            wasResult = true;
+            resIx += blockDim.x;
+        }
+        _add(_start, _stride);
+    }
+    summaryShared(unifiedResult, isResultFlag);
+}
+__global__ void kernelCompressed(uint32_t* unifiedResult, bool* isResultFlag, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks) {
+    uint64_t _start[5];
+    beu32 d_hash[8];
+
+    int64_t resIx = threadIdx.x;
+    int64_t tIx = (threadIdx.x + blockIdx.x * blockDim.x) * threadNumberOfChecks;
+    IMult(_start, _stride, tIx);
+    _add(_start, buffRangeStart);
+    bool wasResult = false;
+    initShared();
+    for (uint64_t i = 0, resultIx = tIx; i < threadNumberOfChecks; i++, resultIx++) {
+        if (((_start[0] & 0xff00000000) >> 32) != 0x01) {
+            _add(_start, _stride);
+            continue;
+        }
+        if (_checksumDoubleSha256CheckCompressed(_start[0] & 0xffffffff, d_hash, _start)) {
+            _blockResults[resIx] = resultIx;
+            if (!wasResult) {
+                _blockResultFlag[0] = true;
+            }
+            wasResult = true;
+            resIx += blockDim.x;            
+        }
+        _add(_start, _stride);
+    }
+    summaryShared(unifiedResult, isResultFlag);
+}
+__global__ void kernelCompressed(uint32_t* unifiedResult, bool* isResultFlag, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks, const uint32_t checksum) {
+    uint64_t _start[5];
+    beu32 d_hash[8];
+
+    int64_t resIx = threadIdx.x;
+    int64_t tIx = (threadIdx.x + blockIdx.x * blockDim.x) * threadNumberOfChecks;
+    IMult(_start, _stride, tIx);
+    _add(_start, buffRangeStart);
+    bool wasResult = false;
+    initShared();
+    for (uint64_t i = 0, resultIx = tIx; i < threadNumberOfChecks; i++, resultIx++) {
+        if (((_start[0] & 0xff00000000) >> 32) != 0x01) {
+            _add(_start, _stride);
+            continue;
+        }
+        if (_checksumDoubleSha256CheckCompressed(checksum, d_hash, _start)) {
+            _blockResults[resIx] = resultIx;
+            if (!wasResult) {
+                _blockResultFlag[0] = true;
+            }
+            wasResult = true;
+            resIx += blockDim.x;
+        }
+        _add(_start, _stride);
+    }
+    summaryShared(unifiedResult, isResultFlag);
+}
+
+__device__ void initShared() {
+    if (threadIdx.x == 0) {
+        _blockResultFlag[0] = false;
+        for (int i = 0; i < blockDim.x * 4; i++) {
+            _blockResults[i] = UINT32_MAX;
+        }
+    }
+    __syncthreads();
+}
+__device__ void summaryShared(uint32_t* unifiedResult, bool* isResultFlag) {
+    __syncthreads();
+    if (_blockResultFlag[0] && threadIdx.x == 0) {
+        isResultFlag[0] = true;
+        for (int i = 0, rIx = blockIdx.x; i < blockDim.x * 4; i++) {
+            if (_blockResults[i] != UINT32_MAX) {
+                unifiedResult[rIx] = _blockResults[i];
+                rIx += gridDim.x;
+            }
+        }
+    }
 }
 
 __device__ bool _checksumDoubleSha256CheckCompressed(unsigned int checksum, beu32* d_hash, uint64_t* _start) {
