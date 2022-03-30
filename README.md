@@ -8,7 +8,7 @@ Usage:
          -stride hexKeyStride -rangeStart hexKeyStart [-rangeEnd hexKeyEnd] [-checksum hexChecksum] 
          [-decode wifToDecode]
          [-restore statusFile]
-         [-listDevices]
+         [-listDevices] [-disable-um]
          [-h]
 
      -rangeStart hexKeyStart: decoded initial key with compression flag and checksum
@@ -29,7 +29,7 @@ Usage:
      -decode wifToDecode:     decodes given WIF
      -restore statusFile:     restore work configuration
      -listDevices:            shows available devices
-	 -disable-um:             disable unified memory mode
+     -disable-um:             disable unified memory mode
      -h :                     shows help
      
 
@@ -88,6 +88,7 @@ Test card: RTX3060 (eGPU!) with 224 BLOCKS & 512 BLOCK_THREADS (program default 
 |---------------|---------------------------|---------------------|
 | RTX 3060 eGPU | 10000                     | 1520 (224/512/20000)|
 | RTX 3090      | 29500                     | 3950 (656/640/5000) |
+| RTX 3080TI    |                           | 4090 (640/640/5000) |
 | GTX 1080TI    | 6000                      | 750                 |
 
 Please consult official Nvidia Occupancy Calculator (https://docs.nvidia.com/cuda/cuda-occupancy-calculator/index.html) to see how to select desired amount of threads/block (shared memory=0, registers per thread = 48). Adjust number of steps per thread to obtain the optimal performance.
