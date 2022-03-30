@@ -177,7 +177,6 @@ cudaError_t processCudaUnified() {
         __Load(buffRangeStart, RANGE_START.bits64);
         cudaStatus = cudaMemcpy(dev_buffRangeStart, buffRangeStart, RANGE_TRANSFER_SIZE, cudaMemcpyHostToDevice);
         //launch work
-        std::chrono::steady_clock::time_point beginKernel = std::chrono::steady_clock::now();
         if (COMPRESSED) {
             if (IS_CHECKSUM) {
                 kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (buffResultManaged, buffIsResultManaged, dev_buffRangeStart, THREAD_STEPS, expectedChecksum);
@@ -204,7 +203,7 @@ cudaError_t processCudaUnified() {
             fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching kernel!\n", cudaStatus);
             goto Error;
         }
-        int64_t tKernel = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - beginKernel).count();        
+        
         if (buffIsResultManaged[0]) {
             buffIsResultManaged[0] = false;
             for (int i = 0; i < COLLECTOR_SIZE_MM && !RESULT; i++) {
