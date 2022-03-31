@@ -87,6 +87,7 @@ Test card: RTX3060 (eGPU!) with 224 BLOCKS & 512 BLOCK_THREADS (program default 
 | card          | compressed with collision | all other cases     |
 |---------------|---------------------------|---------------------|
 | RTX 3060 eGPU | 10000                     | 1520 (224/512/20000)|
+| RTX 3070      |                           | 2200 (414/640/5000) |
 | RTX 3090      | 29500                     | 3950 (656/640/5000) |
 | RTX 3080TI    |                           | 4090 (640/640/5000) |
 | RTX A6000     |                           | 4070 (588/640/5000) |
