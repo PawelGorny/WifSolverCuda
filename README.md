@@ -89,6 +89,7 @@ Test card: RTX3060 (eGPU!) with 224 BLOCKS & 512 BLOCK_THREADS (program default 
 | RTX 3060 eGPU | 10000                     | 1520 (224/512/20000)|
 | RTX 3090      | 29500                     | 3950 (656/640/5000) |
 | RTX 3080TI    |                           | 4090 (640/640/5000) |
+| RTX A6000     |                           | 4070 (588/640/5000) |
 | GTX 1080TI    | 6000                      | 750                 |
 
 Please consult official Nvidia Occupancy Calculator (https://docs.nvidia.com/cuda/cuda-occupancy-calculator/index.html) to see how to select desired amount of threads/block (shared memory=0, registers per thread = 48). Adjust number of steps per thread to obtain the optimal performance.
