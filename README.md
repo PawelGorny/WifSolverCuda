@@ -82,16 +82,16 @@ Performance
 -----------
 User should modify number of blocks and number of threads in each block to find values which are the best for his card. Number of tests performed by each thread also could have impact of global performance/latency.  
 
-Test card: RTX3060 (eGPU!) with 224 BLOCKS & 512 BLOCK_THREADS (program default values) checks around 10000 MKey/s for compressed address with missing characters in the middle (collision with checksum) and around 1400-1540 Mkey/s for other cases (20000steps/thread); other results (using default values of blocks, threads and steps per thread):
+Test card: RTX3060 (eGPU!) with 224 BLOCKS & 512 BLOCK_THREADS (program default values) checks around 10000 MKey/s for compressed address with missing characters in the middle (collision with checksum) and around 1400-1540 Mkey/s for missing beginning (20000steps/thread); other results (using default values of blocks, threads and steps per thread):
 
-| card          | compressed with collision | all other cases     |
-|---------------|---------------------------|---------------------|
-| RTX 3060 eGPU | 10000                     | 1520 (224/512/20000)|
-| RTX 3070      |                           | 2200 (414/640/5000) |
-| RTX 3090      | 29500                     | 3950 (656/640/5000) |
-| RTX 3080TI    |                           | 4090 (640/640/5000) |
-| RTX A6000     |                           | 4070 (588/640/5000) |
-| GTX 1080TI    | 6000                      | 750                 |
+| card          | perf Mkey/s, missing beginning
+|---------------|---------------------|
+| RTX 3060 eGPU | 1520 (224/512/20000)|
+| RTX 3070      | 2200 (414/640/5000) |
+| RTX 3090      | 3950 (656/640/5000) |
+| RTX 3080TI    | 4090 (640/640/5000) |
+| RTX A6000     | 4070 (588/640/5000) |
+| GTX 1070      | 950  (135/768/5000) |
 
 Please consult official Nvidia Occupancy Calculator (https://docs.nvidia.com/cuda/cuda-occupancy-calculator/index.html) to see how to select desired amount of threads/block (shared memory=0, registers per thread = 48). Adjust number of steps per thread to obtain the optimal performance.
        
