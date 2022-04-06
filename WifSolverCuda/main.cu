@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <iostream>
+#include <iomanip>
+#include <sstream>
 #include <chrono>
 
 #include "lib/Int.h"
@@ -68,12 +70,14 @@ bool isRestore = false;
 bool showDevices = false;
 bool p2sh = false;
 
+bool isVerbose = false;
+
 Secp256K1* secp;
 
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.5.0\n\n");
+    printf("WifSolver 0.5.1\n\n");
     printf("Use parameter '-h' for help and list of available parameters\n\n");
 
     if (readArgs(argc, argv)) {
@@ -535,8 +539,18 @@ void printSpeed(double speed) {
     double _count = processedCount.ToDouble(); 
     _count = _count / RANGE_TOTAL_DOUBLE;
     _count *= 100;
-    printf("\r %s,  progress: %.3f%%     ", speedStr.c_str(), _count);    
-    //printf("\r %s,    ", speedStr.c_str()); 
+    if (isVerbose) {
+        char wif[53];
+        unsigned char* buff = new unsigned char[dataLen];
+        for (int i = 0, d = dataLen - 1; i < dataLen; i++, d--) {
+            buff[i] = RANGE_START.GetByte(d);
+        }
+        b58encode(wif, &wifLen, buff, dataLen);
+        printf("\r %s,  progress: %.3f%%, WIF: %s    ", speedStr.c_str(), _count, wif);
+    }
+    else {
+        printf("\r %s,  progress: %.3f%%     ", speedStr.c_str(), _count);
+    }
     fflush(stdout);
 }
 
@@ -648,12 +662,16 @@ void showHelp() {
     printf("WifSolverCuda [-d deviceId] [-b NbBlocks] [-t NbThreads] [-s NbThreadChecks]\n");
     printf("    [-fresultp reportFile] [-fresult resultFile] [-fstatus statusFile] [-a targetAddress]\n");
     printf("    -stride hexKeyStride -rangeStart hexKeyStart [-rangeEnd hexKeyEnd] [-checksum hexChecksum] \n");
+    printf("    -wifStart wifKeyStart [-wifEnd wifKeyEnd]\n");
     printf("    [-decode wifToDecode] \n");
     printf("    [-restore statusFile] \n");
     printf("    [-listDevices] \n");
+    printf("    [-v] \n");
     printf("    [-h] \n\n");
     printf("-rangeStart hexKeyStart: decoded initial key with compression flag and checksum \n");
-    printf("-rangeEnd hexKeyEnd:     decoded end key with compression flag and checksum \n");
+    printf("-rangeEnd hexKeyEnd:     decoded end key with compression flag and checksum (optional)\n");
+    printf("-wifStart wifKeyStart:   initial key (WIF)\n");
+    printf("-wifEnd wifKeyEnd:       end key (WIF) (optional)\n");
     printf("-checksum hexChecksum:   decoded checksum, cannot be modified with a stride  \n");
     printf("-stride hexKeyStride:    full stride calculated as 58^(most-right missing char index) \n");
     printf("-a targetAddress:        expected address\n");
@@ -671,6 +689,7 @@ void showHelp() {
     printf("-restore statusFile:     restore work configuration\n");
     printf("-listDevices:            shows available devices\n");
     printf("-disable-um:             disable unified memory mode\n");
+    printf("-v :                     verbose output\n");
     printf("-h :                     shows help\n");
 }
  
@@ -739,6 +758,36 @@ bool readArgs(int argc, char** argv) {
             RANGE_END.SetBase16((char*)string(argv[a]).c_str());
             isEnd = true;
         }
+        else if (strcmp(argv[a], "-wifStart") == 0) {
+            a++;
+            WIF_TO_DECODE = string(argv[a]);
+            const char* base58 = WIF_TO_DECODE.c_str();
+            size_t base58Length = WIF_TO_DECODE.size();
+            size_t keybuflen = base58Length == 52 ? 38 : 37;
+            unsigned char* keybuf = new unsigned char[keybuflen];
+            b58decode(keybuf, &keybuflen, base58, base58Length);
+            stringstream ss;
+            for (int i = 0; i < keybuflen; ++i) {
+                ss << std::setfill('0') << std::setw(2)<< (std::hex) << (int)keybuf[i];
+            }
+            RANGE_START.SetBase16((char*)ss.str().c_str());
+            isStart = true;
+        }
+        else if (strcmp(argv[a], "-wifEnd") == 0) {
+            a++;
+            WIF_TO_DECODE = string(argv[a]);
+            const char* base58 = WIF_TO_DECODE.c_str();
+            size_t base58Length = WIF_TO_DECODE.size();
+            size_t keybuflen = base58Length == 52 ? 38 : 37;
+            unsigned char* keybuf = new unsigned char[keybuflen];
+            b58decode(keybuf, &keybuflen, base58, base58Length);
+            stringstream ss;
+            for (int i = 0; i < keybuflen; ++i) {
+                ss << std::setfill('0') << std::setw(2) << (std::hex) << (int)keybuf[i];
+            }
+            RANGE_END.SetBase16((char*)ss.str().c_str());
+            isEnd = true;
+        }
         else if (strcmp(argv[a], "-fresult") == 0) {
             a++;
             fileResult = string(argv[a]);
@@ -771,6 +820,9 @@ bool readArgs(int argc, char** argv) {
         else if (strcmp(argv[a], "-disable-um") == 0) {
             unifiedMemory = 0;
             printf("unified memory mode disabled\n");
+        }
+        else if (strcmp(argv[a], "-v") == 0) {
+        isVerbose = true;
         }
         a++;
     }    
