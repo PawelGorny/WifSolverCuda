@@ -33,6 +33,7 @@ void restoreSettings(string fileStatusRestore);
 
 cudaError_t processCuda();
 cudaError_t processCudaUnified();
+cudaError_t executeKernel(uint32_t* _buffResultManaged, bool* _buffIsResultManaged, uint64_t* const _dev_buffRangeStart, const uint32_t _checksum);
 
 bool unifiedMemory = true;
 
@@ -77,10 +78,10 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.5.1\n\n");
+    printf("WifSolver 0.5.2\n\n");
     printf("Use parameter '-h' for help and list of available parameters\n\n");
 
-    if (readArgs(argc, argv)) {
+    if (argc <=1 || readArgs(argc, argv)) {
         showHelp(); 
         printFooter();
         return 0;
@@ -156,16 +157,9 @@ cudaError_t processCudaUnified() {
 
     uint32_t* buffResultManaged = new uint32_t[COLLECTOR_SIZE_MM];
     cudaStatus = cudaMallocManaged(&buffResultManaged, COLLECTOR_SIZE_MM * sizeof(uint32_t));
-
     for (int i = 0; i < COLLECTOR_SIZE_MM; i++) {
         buffResultManaged[i] = UINT32_MAX;
     }
-
-    bool* buffCollectorWork = new bool[1];
-    buffCollectorWork[0] = false;
-    bool* dev_buffCollectorWork = new bool[1];
-    cudaStatus = cudaMalloc((void**)&dev_buffCollectorWork, 1 * sizeof(bool));
-    cudaStatus = cudaMemcpy(dev_buffCollectorWork, buffCollectorWork, 1 * sizeof(bool), cudaMemcpyHostToDevice); 
 
     cudaStatus = cudaMalloc((void**)&dev_buffRangeStart, NB64BLOCK * sizeof(uint64_t));
 
@@ -173,46 +167,54 @@ cudaError_t processCudaUnified() {
     cudaStatus = cudaMallocManaged(&buffIsResultManaged, 1 * sizeof(bool));
     buffIsResultManaged[0] = false;    
 
+    __Load(buffRangeStart, RANGE_START.bits64);
+    cudaStatus = cudaMemcpy(dev_buffRangeStart, buffRangeStart, RANGE_TRANSFER_SIZE, cudaMemcpyHostToDevice);
+
     std::chrono::steady_clock::time_point beginCountHashrate = std::chrono::steady_clock::now();
     std::chrono::steady_clock::time_point beginCountStatus = std::chrono::steady_clock::now();
 
     while (!RESULT && RANGE_START.IsLower(&RANGE_END)) {
-        //prepare launch
-        __Load(buffRangeStart, RANGE_START.bits64);
-        cudaStatus = cudaMemcpy(dev_buffRangeStart, buffRangeStart, RANGE_TRANSFER_SIZE, cudaMemcpyHostToDevice);
         //launch work
-        if (COMPRESSED) {
-            if (IS_CHECKSUM) {
-                kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (buffResultManaged, buffIsResultManaged, dev_buffRangeStart, THREAD_STEPS, expectedChecksum);
-            }
-            else {
-                kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (buffResultManaged, buffIsResultManaged, dev_buffRangeStart, THREAD_STEPS);
-            }
-        }
-        else {
-            if (IS_CHECKSUM) {
-                kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (buffResultManaged, buffIsResultManaged, dev_buffRangeStart, THREAD_STEPS, expectedChecksum);
-            }
-            else {
-                kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (buffResultManaged, buffIsResultManaged, dev_buffRangeStart, THREAD_STEPS);
-            }
-        }
-        cudaStatus = cudaGetLastError();
+        cudaStatus = executeKernel(buffResultManaged, buffIsResultManaged, dev_buffRangeStart, expectedChecksum);
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "kernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
             goto Error;
         }
+
+        //status display while waiting for GPU
+        long long tHash = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - beginCountHashrate).count();
+        if (tHash >= 5000) {
+            printSpeed((double)((double)counter / tHash) / 1000.0);
+            counter = 0;
+            beginCountHashrate = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - beginCountStatus).count() >= fileStatusInterval) {
+                saveStatus();
+                beginCountStatus = std::chrono::steady_clock::now();
+            }
+        }
+
+        counter += outputSize;
+        //prepare the results tests
+        Int rangeTestStart = new Int(&RANGE_START);
+        //pre-prepare the next launch
+        RANGE_START.Add(&loopStride);
+        __Load(buffRangeStart, RANGE_START.bits64);
+
         cudaStatus = cudaDeviceSynchronize();
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching kernel!\n", cudaStatus);
             goto Error;
         }
-        
+
+        //prepare the next launch on device
+        cudaStatus = cudaMemcpyAsync(dev_buffRangeStart, buffRangeStart, RANGE_TRANSFER_SIZE, cudaMemcpyHostToDevice);
+
+        //verify the last results
         if (buffIsResultManaged[0]) {
             buffIsResultManaged[0] = false;
             for (int i = 0; i < COLLECTOR_SIZE_MM && !RESULT; i++) {
                 if (buffResultManaged[i] != UINT32_MAX) {
-                    Int toTest = new Int(&RANGE_START);
+                    Int toTest = new Int(&rangeTestStart);
                     Int diff = new Int(&STRIDE);
                     diff.Mult(buffResultManaged[i]);
                     toTest.Add(&diff);
@@ -221,27 +223,33 @@ cudaError_t processCudaUnified() {
                 }
             }
         }//test
-
-        RANGE_START.Add(&loopStride);
-        counter += outputSize;
-        int64_t tHash = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - beginCountHashrate).count();
-        if (tHash > 5) {
-            double speed = (double)((double)counter / tHash) / 1000000.0;
-            printSpeed(speed);
-            counter = 0;
-            beginCountHashrate = std::chrono::steady_clock::now();
-        }
-        if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - beginCountStatus).count() > fileStatusInterval) {
-            saveStatus();
-            beginCountStatus = std::chrono::steady_clock::now();
-        }
-    }//while
+    }//while loop
 
 Error:
     cudaFree(dev_buffRangeStart);
-    cudaFree(dev_buffCollectorWork);
     cudaFree(buffResultManaged);
+    cudaFree(buffIsResultManaged);
     return cudaStatus;
+}
+
+cudaError_t executeKernel(uint32_t* _buffResultManaged, bool* _buffIsResultManaged, uint64_t* const _dev_buffRangeStart, const uint32_t _checksum) {
+    if (COMPRESSED) {
+        if (IS_CHECKSUM) {
+            kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (_buffResultManaged, _buffIsResultManaged, _dev_buffRangeStart, THREAD_STEPS, _checksum);
+        }
+        else {
+            kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (_buffResultManaged, _buffIsResultManaged, _dev_buffRangeStart, THREAD_STEPS);
+        }
+    }
+    else {
+        if (IS_CHECKSUM) {
+            kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (_buffResultManaged, _buffIsResultManaged, _dev_buffRangeStart, THREAD_STEPS, _checksum);
+        }
+        else {
+            kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (_buffResultManaged, _buffIsResultManaged, _dev_buffRangeStart, THREAD_STEPS);
+        }
+    }
+    return cudaGetLastError();
 }
 
 cudaError_t processCuda() {
