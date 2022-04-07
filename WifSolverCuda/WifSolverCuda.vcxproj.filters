@@ -24,6 +24,7 @@
     <ClInclude Include="lib\SECP256k1.h" />
     <ClInclude Include="lib\util.h" />
     <ClInclude Include="lib\base58.h" />
+    <ClInclude Include="lib\Bech32.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="lib\hash\ripemd160.cpp" />
@@ -37,5 +38,6 @@
     <ClCompile Include="lib\SECP256K1.cpp" />
     <ClCompile Include="lib\util.cpp" />
     <ClCompile Include="lib\base58.c" />
+    <ClCompile Include="lib\Bech32.cpp" />
   </ItemGroup>
 </Project>

@@ -72,6 +72,7 @@ Similar test for compressed WIF (target _Kzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
    
 For other of examples please see the file /docs/examples.txt. 
 
+Program supports legacy addresses (1...), native Segwit/bench32 P2WPKH (bc1...) and P2WPKH-P2SH addresses (3...).
         
 Build
 -----

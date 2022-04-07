@@ -43,3 +43,20 @@ L5K111111KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKJsczi8wg
 80 f16ba6edac7d556f83fd0b3493826eb06069439fe836b001ddcaaa326d92d785 01 4d463f37
 
 -c -rangeStart 80f16ba6edac7d556f83fd0b3493826eb06069439fe836b001ddcaaa326d92d785014d463f37 -stride edbafda67ca37188cf28263571f03b9716879e4acc9c514ab67280000000000 -checksum 4d463f37 -a 1M9JqAMbCBwtvNLedwNG4TjiPsxATJrvxq
+
+===============================================================================
+bc1qkqjj2ack2psdn0nqm4ea2xzug4hdmq3gc9cjt6
+35qaE5aJERKLGzFYwFUCovtQV8b9GVAuvH
+Kwyw8dQGwjZtguw5vGexmFqPK66uoSPukcEd4DJJLLkJbb4Nwjc6 4e6903fb
+80 16c00715c6976cb6d1d87d2514942724b7595d2d5a997f9e42046e391d973f68 01 4e6903fb
+===============================================================================
+Kwyw8dQGwjZtguw5vGexmFqPK66uoSPukcE_____LLkJbb4Nwjc6
+                                       ^ 58^12 = 4e900abb53e6b71000
+Kwyw8dQGwjZtguw5vGexmFqPK66uoSPukcE11111LLkJbb4Nwjc6
+8016c00715c6976cb6d1d87d2514942724b7595d2d5a997f9e3a8dcaf5461c4a2118f8aed3fb
+Kwyw8dQGwjZtguw5vGexmFqPK66uoSPukcEzzzzzLLkJbb4Nwjc6
+8016c00715c6976cb6d1d87d2514942724b7595d2d5a997f9e468f507dba430bac941ab1c3fb
+
+-c -rangeStart 8016c00715c6976cb6d1d87d2514942724b7595d2d5a997f9e3a8dcaf5461c4a2118f8aed3fb -stride 4e900abb53e6b71000 -rangeEnd 8016c00715c6976cb6d1d87d2514942724b7595d2d5a997f9e468f507dba430bac941ab1c3fb -a bc1qkqjj2ack2psdn0nqm4ea2xzug4hdmq3gc9cjt6
+
+-c -rangeStart 8016c00715c6976cb6d1d87d2514942724b7595d2d5a997f9e3a8dcaf5461c4a2118f8aed3fb -stride 4e900abb53e6b71000 -rangeEnd 8016c00715c6976cb6d1d87d2514942724b7595d2d5a997f9e468f507dba430bac941ab1c3fb -a 35qaE5aJERKLGzFYwFUCovtQV8b9GVAuvH

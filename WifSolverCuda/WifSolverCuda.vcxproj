@@ -85,6 +85,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="lib\base58.h" />
+    <ClInclude Include="lib\Bech32.h" />
     <ClInclude Include="lib\hash\ripemd160.h" />
     <ClInclude Include="lib\hash\sha256.h" />
     <ClInclude Include="lib\Int.h" />
@@ -97,6 +98,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="lib\base58.c" />
+    <ClCompile Include="lib\Bech32.cpp" />
     <ClCompile Include="lib\hash\ripemd160.cpp" />
     <ClCompile Include="lib\hash\ripemd160_sse.cpp" />
     <ClCompile Include="lib\hash\sha256.cpp" />

@@ -21,6 +21,7 @@ all:
 	$(CXX) $(CXXFLAGS) -o $(OBJDIR)/sha256_sse.o -c lib/hash/sha256_sse.cpp
 	gcc -O3 -c lib/base58.c -o $(OBJDIR)/base58.o
 	$(CXX) -O3 -c lib/util.cpp -o $(OBJDIR)/util.o
+	$(CXX) -O3 -c lib/Bech32.cpp -o $(OBJDIR)/Bech32.o
 	$(CXX) $(CXXFLAGS) -c lib/Int.cpp -o $(OBJDIR)/Int.o
 	$(CXX) $(CXXFLAGS) -c lib/Point.cpp -o $(OBJDIR)/Point.o
 	$(CXX) $(CXXFLAGS) -c lib/SECP256K1.cpp -o $(OBJDIR)/SECP256K1.o
@@ -32,7 +33,7 @@ all:
 	$(NVCC) --ptxas-options=-v -maxrregcount=0 --compile --compiler-options -fPIC -ccbin $(CXXCUDA) -m64 -O2 -I$(CUDA)/include 	-gencode=arch=compute_$(COMPUTE_CAP),code=sm_$(COMPUTE_CAP) -o $(OBJDIR)/main.o -c main.cu
 
 	@echo Making WifSolver...
-	$(CXX) $(OBJDIR)/ripemd160.o $(OBJDIR)/ripemd160_sse.o $(OBJDIR)/sha256cpp.o $(OBJDIR)/sha256_sse.o $(OBJDIR)/base58.o $(OBJDIR)/util.o $(OBJDIR)/Int.o $(OBJDIR)/Point.o $(OBJDIR)/SECP256K1.o $(OBJDIR)/IntGroup.o $(OBJDIR)/IntMod.o $(OBJDIR)/sha256.o $(OBJDIR)/Worker1.o $(OBJDIR)/main.o $(LFLAGS) -o wifSolver
+	$(CXX) $(OBJDIR)/ripemd160.o $(OBJDIR)/ripemd160_sse.o $(OBJDIR)/sha256cpp.o $(OBJDIR)/sha256_sse.o $(OBJDIR)/base58.o $(OBJDIR)/util.o $(OBJDIR)/Bech32.o $(OBJDIR)/Int.o $(OBJDIR)/Point.o $(OBJDIR)/SECP256K1.o $(OBJDIR)/IntGroup.o $(OBJDIR)/IntMod.o $(OBJDIR)/sha256.o $(OBJDIR)/Worker1.o $(OBJDIR)/main.o $(LFLAGS) -o wifSolver
 
 clean:
 	@echo Cleaning...

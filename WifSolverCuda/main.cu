@@ -13,6 +13,7 @@
 #include "lib/Int.h"
 #include "lib/Math.cuh"
 #include "lib/util.h"
+#include "lib/Bech32.h"
 #include "Worker.cuh"
 
 #include "lib/SECP256k1.h"
@@ -70,6 +71,7 @@ bool isRestore = false;
 
 bool showDevices = false;
 bool p2sh = false;
+bool bech32 = false;
 
 bool isVerbose = false;
 
@@ -78,7 +80,7 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.5.2\n\n");
+    printf("WifSolver 0.5.3\n\n");
     printf("Use parameter '-h' for help and list of available parameters\n\n");
 
     if (argc <=1 || readArgs(argc, argv)) {
@@ -564,20 +566,31 @@ void printSpeed(double speed) {
 
 void processCandidate(Int &toTest) {     
     FILE* keys;
-    char rmdhash[21], address[50], wif[53];        
+    char rmdhash[21], address[128], wif[53];
+
     unsigned char* buff = new unsigned char[dataLen];
     for (int i = 0, d=dataLen-1; i < dataLen; i++, d--) {
         buff[i] = toTest.GetByte(d);
     }       
     toTest.SetBase16((char*)toTest.GetBase16().substr(2, 64).c_str());        
-    Point publickey = secp->ComputePublicKey(&toTest);        
-    if (p2sh) {
-        secp->GetHash160(P2SH, true, publickey, (unsigned char*)rmdhash);
+    Point publickey = secp->ComputePublicKey(&toTest);
+    if (bech32){
+        char output[128];
+        uint8_t h160[20];
+        secp->GetHash160(BECH32, true, publickey, h160);
+        segwit_addr_encode(output, "bc", 0, h160, 20);
+        string addressBech32 = std::string(output);
+        strcpy(address, addressBech32.c_str());
     }
     else {
-        secp->GetHash160(P2PKH, COMPRESSED, publickey, (unsigned char*)rmdhash);
-    }
-    addressToBase58(rmdhash, address, p2sh);    
+        if (p2sh) {
+            secp->GetHash160(P2SH, true, publickey, (unsigned char*)rmdhash);
+        }
+        else {
+            secp->GetHash160(P2PKH, COMPRESSED, publickey, (unsigned char*)rmdhash);
+        }
+        addressToBase58(rmdhash, address, p2sh);
+    }   
     if (!TARGET_ADDRESS.empty()) {
         if (TARGET_ADDRESS == address) {
             RESULT = true;            
@@ -817,6 +830,10 @@ bool readArgs(int argc, char** argv) {
             TARGET_ADDRESS = string(argv[a]);
             if (argv[a][0] == '3') {
                 p2sh = true;
+                COMPRESSED = true;
+            }else
+            if (argv[a][0] == 'b') {
+                bech32 = true;
                 COMPRESSED = true;
             }
         }
