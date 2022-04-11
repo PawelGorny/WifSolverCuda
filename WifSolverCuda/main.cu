@@ -69,6 +69,7 @@ int fileStatusInterval = 60;
 string fileStatusRestore;
 bool isRestore = false;
 
+bool isRANGE_START_TOTAL = false;
 bool showDevices = false;
 bool p2sh = false;
 bool bech32 = false;
@@ -80,7 +81,7 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.5.3\n\n");
+    printf("WifSolver 0.5.4\n\n");
     printf("Use parameter '-h' for help and list of available parameters\n\n");
 
     if (argc <=1 || readArgs(argc, argv)) {
@@ -103,7 +104,12 @@ int main(int argc, char** argv)
     }   
 
     dataLen = COMPRESSED ? 38 : 37;
-    RANGE_START_TOTAL.Set(&RANGE_START);
+    if (!isRANGE_START_TOTAL) {
+        RANGE_START_TOTAL.Set(&RANGE_START);
+    }
+    else {
+        printf("RESTORE: Starting point: %s\n", RANGE_START.GetBase16().c_str());
+    }
     RANGE_TOTAL.Set(&RANGE_END);
     RANGE_TOTAL.Sub(&RANGE_START_TOTAL);
     RANGE_TOTAL_DOUBLE = RANGE_TOTAL.ToDouble();
@@ -430,6 +436,12 @@ void restoreSettings(string fileStatusRestore) {
             RANGE_START.SetBase16((char*)s.substr(prefix.size(), s.size() - prefix.size() - 1).c_str());
             continue;
         }
+        prefix = string("-rangeStartInit=");
+        if (s.rfind(prefix, 0) == 0) {
+            RANGE_START_TOTAL.SetBase16((char*)s.substr(prefix.size(), s.size() - prefix.size() - 1).c_str());
+            isRANGE_START_TOTAL = true;
+            continue;
+        }
         prefix = string("-rangeEnd=");
         if (s.rfind(prefix, 0) == 0) {
             RANGE_END.SetBase16((char*)s.substr(prefix.size(), s.size() - prefix.size() - 1).c_str());
@@ -499,6 +511,7 @@ void saveStatus() {
     if (b58encode(wif, &wifLen, buff, dataLen)) {
         fprintf(stat, "%s\n", wif);
     }
+    fprintf(stat, "-rangeStartInit=%s\n", RANGE_START_TOTAL.GetBase16().c_str());
     fprintf(stat, "-rangeStart=%s\n", RANGE_START.GetBase16().c_str());
     fprintf(stat, "-rangeEnd=%s\n", RANGE_END.GetBase16().c_str());
     fprintf(stat, "-stride=%s\n", STRIDE.GetBase16().c_str());
@@ -624,7 +637,7 @@ void processCandidate(Int &toTest) {
 }
 
 void printConfig() {
-    printf("Range start: %s\n", RANGE_START.GetBase16().c_str());
+    printf("Range start: %s\n", RANGE_START_TOTAL.GetBase16().c_str());
     printf("Range end  : %s\n", RANGE_END.GetBase16().c_str());
     printf("Stride     : %s\n", STRIDE.GetBase16().c_str());
     if (IS_CHECKSUM) {
