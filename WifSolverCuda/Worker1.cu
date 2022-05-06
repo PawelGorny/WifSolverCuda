@@ -156,8 +156,8 @@ __global__ void kernelCompressed(uint32_t* unifiedResult, bool* isResultFlag, ui
             _blockResults[resIx] = resultIx;
             if (!wasResult) {
                 _blockResultFlag[0] = true;
-            }
-            wasResult = true;
+                wasResult = true;
+            }            
             resIx += blockDim.x;            
         }
         _add(_start, _stride);
@@ -183,8 +183,8 @@ __global__ void kernelCompressed(uint32_t* unifiedResult, bool* isResultFlag, ui
             _blockResults[resIx] = resultIx;
             if (!wasResult) {
                 _blockResultFlag[0] = true;
+                wasResult = true;
             }
-            wasResult = true;
             resIx += blockDim.x;
         }
         _add(_start, _stride);
@@ -192,16 +192,17 @@ __global__ void kernelCompressed(uint32_t* unifiedResult, bool* isResultFlag, ui
     summaryShared(unifiedResult, isResultFlag);
 }
 
-__device__ void initShared() {
+__device__ __inline__ void initShared() {
+    for (int i = threadIdx.x; i < blockDim.x * 4;) {
+        _blockResults[i] = UINT32_MAX;
+        i += blockDim.x;
+    }
     if (threadIdx.x == 0) {
-        _blockResultFlag[0] = false;
-        for (int i = 0; i < blockDim.x * 4; i++) {
-            _blockResults[i] = UINT32_MAX;
-        }
+        _blockResultFlag[0] = false;  
     }
     __syncthreads();
 }
-__device__ void summaryShared(uint32_t* unifiedResult, bool* isResultFlag) {
+__device__ __inline__ void summaryShared(uint32_t* unifiedResult, bool* isResultFlag) {
     __syncthreads();
     if (_blockResultFlag[0] && threadIdx.x == 0) {
         isResultFlag[0] = true;
@@ -214,7 +215,7 @@ __device__ void summaryShared(uint32_t* unifiedResult, bool* isResultFlag) {
     }
 }
 
-__device__ bool _checksumDoubleSha256CheckCompressed(unsigned int checksum, beu32* d_hash, uint64_t* _start) {
+__device__  __inline__ bool _checksumDoubleSha256CheckCompressed(unsigned int checksum, beu32* d_hash, uint64_t* _start) {
     sha256Kernel(d_hash,
         _start[4] >> 16,
         (_start[4] & 0x0000ffff) << 16 | _start[3] >> 48,
@@ -236,7 +237,7 @@ __device__ bool _checksumDoubleSha256CheckCompressed(unsigned int checksum, beu3
     return _checksumDoubleSha256(checksum, d_hash);
 }
 
-__device__ bool _checksumDoubleSha256CheckUncompressed(unsigned int checksum, beu32* d_hash, uint64_t* _start) {
+__device__  __inline__ bool _checksumDoubleSha256CheckUncompressed(unsigned int checksum, beu32* d_hash, uint64_t* _start) {
     sha256Kernel(d_hash,
         _start[4] >> 8,
         (_start[4] & 0x000000ff) << 24 | _start[3] >> 40,
@@ -258,14 +259,14 @@ __device__ bool _checksumDoubleSha256CheckUncompressed(unsigned int checksum, be
     return _checksumDoubleSha256(checksum, d_hash);
 }
 
-__device__ bool _checksumDoubleSha256(unsigned int checksum, beu32* d_hash) {
+__device__  __inline__ bool _checksumDoubleSha256(unsigned int checksum, beu32* d_hash) {
     sha256Kernel(d_hash, d_hash[0], d_hash[1], d_hash[2], d_hash[3], d_hash[4], d_hash[5],
         d_hash[6], d_hash[7], 0x80000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
         0x00000000, 0x00000000, 0x100);
     return (checksum == d_hash[0]);
 }
 
-__device__ void sha256Kernel(beu32* const hash, C16(COMMA, EMPTY)) {
+__device__  __inline__ void sha256Kernel(beu32* const hash, C16(COMMA, EMPTY)) {
 #undef  H
 #define H(i,alpha,magic)  beu32 hout##i;
 
@@ -288,16 +289,16 @@ __device__ void sha256Kernel(beu32* const hash, C16(COMMA, EMPTY)) {
     H8(EMPTY, EMPTY);
 }
 
-__device__ void _add(uint64_t* C, uint64_t* A) {
+__device__  __inline__ void _add(uint64_t* C, uint64_t* A) {
     __Add1(C, A);
 }
 
-__device__ void _load(uint64_t* C, uint64_t* A) {
+__device__  __inline__ void _load(uint64_t* C, uint64_t* A) {
     __Load(C, A);
 }
 
 
-__device__ void IMult(uint64_t* r, uint64_t* a, int64_t b) {
+__device__  __inline__ void IMult(uint64_t* r, uint64_t* a, int64_t b) {
     uint64_t t[NBBLOCK];
     // Make b positive
     int64_t msk = b >> 63;

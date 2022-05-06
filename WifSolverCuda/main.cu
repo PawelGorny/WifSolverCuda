@@ -81,7 +81,7 @@ Secp256K1* secp;
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.5.4\n\n");
+    printf("WifSolver 0.5.5\n\n");
     printf("Use parameter '-h' for help and list of available parameters\n\n");
 
     if (argc <=1 || readArgs(argc, argv)) {
@@ -218,18 +218,18 @@ cudaError_t processCudaUnified() {
         cudaStatus = cudaMemcpyAsync(dev_buffRangeStart, buffRangeStart, RANGE_TRANSFER_SIZE, cudaMemcpyHostToDevice);
 
         //verify the last results
-        if (buffIsResultManaged[0]) {
+        if (buffIsResultManaged[0]) {            
             buffIsResultManaged[0] = false;
             for (int i = 0; i < COLLECTOR_SIZE_MM && !RESULT; i++) {
-                if (buffResultManaged[i] != UINT32_MAX) {
+                if (buffResultManaged[i] != UINT32_MAX) {                    
                     Int toTest = new Int(&rangeTestStart);
                     Int diff = new Int(&STRIDE);
                     diff.Mult(buffResultManaged[i]);
                     toTest.Add(&diff);
                     processCandidate(toTest);
-                    buffResultManaged[i] = UINT32_MAX;
-                }
-            }
+                    buffResultManaged[i] = UINT32_MAX;                                        
+                }                
+            }            
         }//test
     }//while loop
 
