@@ -25,7 +25,7 @@ Usage:
      -fresultp reportFile:    file for each WIF with correct checksum (default: result_partial.txt)
      -fstatus statusFile:     file for periodically saved status (default: fileStatus.txt)
      -fstatusIntv seconds:    period between status file updates (default 60 sec)
-	 -d deviceId:             default 0
+	 -d deviceId:             default 0, '-d all' for all available CUDA devices
      -c :                     search for compressed address
      -u :                     search for uncompressed address (default)     
      -b NbBlocks:             default processorCount * 8

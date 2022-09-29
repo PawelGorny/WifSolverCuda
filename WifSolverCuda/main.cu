@@ -2,13 +2,13 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <iostream>
 #include <iomanip>
 #include <sstream>
 #include <chrono>
+#include <thread>
 
 #include "lib/Int.h"
 #include "lib/Math.cuh"
@@ -31,14 +31,18 @@ void decodeWif();
 void printSpeed(double speed);
 void saveStatus();
 void restoreSettings(string fileStatusRestore);
+cudaError_t processingUnit(const uint8_t gpuIx, uint64_t** dev_buffRangeStart, Int buffRangeStart, const uint32_t expectedChecksum, uint32_t* buffResultManaged, bool* buffIsResultManaged);
 
 cudaError_t processCuda();
 cudaError_t processCudaUnified();
-cudaError_t executeKernel(uint32_t* _buffResultManaged, bool* _buffIsResultManaged, uint64_t* const _dev_buffRangeStart, const uint32_t _checksum);
+cudaError_t processCudaUnifiedMulti();
+cudaError_t executeKernel(uint32_t* _buffResultManaged, bool* _buffIsResultManaged, uint64_t* const _dev_buffRangeStart, const uint32_t _checksum, const int gpuIx);
 
 bool unifiedMemory = true;
+const size_t RANGE_TRANSFER_SIZE = NB64BLOCK * sizeof(uint64_t);
 
 int DEVICE_NR = 0;
+int nDevices;
 unsigned int BLOCK_THREADS = 0;
 unsigned int BLOCK_NUMBER = 0;
 unsigned int THREAD_STEPS = 5000;
@@ -79,9 +83,10 @@ bool isVerbose = false;
 Secp256K1* secp;
 
 
+
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.5.5\n\n");
+    printf("WifSolver 0.6.0\n\n");
     printf("Use parameter '-h' for help and list of available parameters\n\n");
 
     if (argc <=1 || readArgs(argc, argv)) {
@@ -128,7 +133,12 @@ int main(int argc, char** argv)
 
     cudaError_t cudaStatus;
     if (unifiedMemory) {
-        cudaStatus = processCudaUnified();
+        if (DEVICE_NR == -1) {
+            cudaStatus = processCudaUnifiedMulti();
+        }
+        else {
+            cudaStatus = processCudaUnified();
+        }
     }
     else {
         cudaStatus = processCuda();
@@ -148,13 +158,129 @@ int main(int argc, char** argv)
     return 0;
 }
 
+cudaError_t processCudaUnifiedMulti() {
+    cudaError_t cudaStatus;
+    
+    uint64_t* buffStride = new uint64_t[NB64BLOCK];    
+    __Load(buffStride, STRIDE.bits64);
+    for (int i = 0; i < nDevices; i++) {        
+        cudaSetDevice(i);
+        loadStride(buffStride);        
+    }
+    delete buffStride;
+    
+    const int COLLECTOR_SIZE_MM_PER_GPU = 4 * BLOCK_NUMBER * BLOCK_THREADS;
+    const int COLLECTOR_SIZE_MM = COLLECTOR_SIZE_MM_PER_GPU * nDevices;
+    const uint32_t expectedChecksum = IS_CHECKSUM ? CHECKSUM.GetInt32() : 0;
+    uint64_t counter = 0;
+
+    uint32_t* buffResultManaged = new uint32_t[COLLECTOR_SIZE_MM];
+    cudaStatus = cudaMallocManaged(&buffResultManaged, COLLECTOR_SIZE_MM * sizeof(uint32_t));
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMallocManaged failed 'buffResultManaged': %s\n", cudaGetErrorString(cudaStatus));
+    }
+    for (int i = 0; i < COLLECTOR_SIZE_MM; i++) {
+        buffResultManaged[i] = UINT32_MAX;
+    }
+    bool* buffIsResultManaged = new bool[nDevices];
+    cudaStatus = cudaMallocManaged(&buffIsResultManaged, nDevices * sizeof(bool));
+    for (int gpuIx = 0; gpuIx < nDevices; gpuIx++) {
+        buffIsResultManaged[gpuIx] = false;
+    }
+
+    uint64_t* buffRangeStart = new uint64_t[NB64BLOCK];
+    uint64_t** dev_buffRangeStart = (uint64_t**)malloc(sizeof(uint64_t*) * nDevices);
+    for (int gpuIx = 0; gpuIx < nDevices; gpuIx++) {
+        cudaSetDevice(gpuIx);
+        cudaStatus = cudaMalloc((void**)&dev_buffRangeStart[gpuIx], NB64BLOCK * sizeof(uint64_t));
+        if (cudaStatus != cudaSuccess) {
+            fprintf(stderr, "%d:: cudaMallocManaged failed 'buffResultManaged': %s\n", gpuIx, cudaGetErrorString(cudaStatus));
+        }
+    }
+
+    std::thread* threads = new std::thread[nDevices];
+
+    std::chrono::steady_clock::time_point beginCountHashrate = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point beginCountStatus = std::chrono::steady_clock::now();
+
+    while (!RESULT && RANGE_START.IsLower(&RANGE_END)) {
+        Int rangeTestStart = new Int(&RANGE_START);     
+        //__Load(buffRangeStart, RANGE_START.bits64);
+        for (int gpuIx = 0; gpuIx < nDevices; gpuIx++) {            
+            threads[gpuIx] = thread(processingUnit, gpuIx, dev_buffRangeStart, rangeTestStart, expectedChecksum, buffResultManaged, buffIsResultManaged);
+        }
+
+        long long tHash = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - beginCountHashrate).count();
+        if (tHash >= 5000) {
+            printSpeed((double)((double)counter / tHash) / 1000.0);
+            counter = 0;
+            beginCountHashrate = std::chrono::steady_clock::now();
+            if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - beginCountStatus).count() >= fileStatusInterval) {
+                saveStatus();
+                beginCountStatus = std::chrono::steady_clock::now();
+            }
+        }
+        counter += outputSize * nDevices;
+        for (uint8_t gpuIx = 0; gpuIx < nDevices; gpuIx++) {
+            threads[gpuIx].join();                        
+        }
+
+        for (uint8_t gpuIx = 0; gpuIx < nDevices; gpuIx++) {
+            //test result, to be moved to separate thread
+            if (buffIsResultManaged[gpuIx]) {
+                buffIsResultManaged[gpuIx] = false;
+                for (int i = COLLECTOR_SIZE_MM_PER_GPU *gpuIx, ix=0; ix < COLLECTOR_SIZE_MM_PER_GPU && !RESULT; i++, ix++) {
+                    if (buffResultManaged[i] != UINT32_MAX) {
+                        Int toTest = new Int(&rangeTestStart);
+                        Int diff = new Int(&STRIDE);
+                        diff.Mult(buffResultManaged[i]);
+                        toTest.Add(&diff);
+                        processCandidate(toTest);
+                        buffResultManaged[i] = UINT32_MAX;
+                    }
+                }
+            }//test
+            rangeTestStart.Add(&loopStride);
+            RANGE_START.Add(&loopStride);
+        }
+    }
+    return cudaStatus;
+}
+
+cudaError_t processingUnit(const uint8_t gpuIx, uint64_t** dev_buffRangeStart, Int rangeStart, const uint32_t expectedChecksum, uint32_t* buffResultManaged, bool* buffIsResultManaged) {
+    cudaSetDevice(gpuIx);
+    Int tempStart = new Int(&rangeStart);
+    if (gpuIx > 0) {
+        Int m = new Int((uint64_t)gpuIx);
+        m.Mult(&loopStride);
+        tempStart.Add(&m);        
+    }    
+    uint64_t* tmpBufferStart = new uint64_t[NBBLOCK];
+    __Load(tmpBufferStart, tempStart.bits64);
+    cudaError_t cudaStatus = cudaMemcpy(dev_buffRangeStart[gpuIx], tmpBufferStart, RANGE_TRANSFER_SIZE, cudaMemcpyHostToDevice);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "%d:: cudaMemcpy failed 'dev_buffRangeStart': %s\n", gpuIx, cudaGetErrorString(cudaStatus));
+        return cudaStatus;
+    }
+    cudaStatus = executeKernel(buffResultManaged, buffIsResultManaged, dev_buffRangeStart[gpuIx], expectedChecksum, gpuIx);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "%d:: kernel launch failed: %s\n", gpuIx, cudaGetErrorString(cudaStatus));
+        return cudaStatus;
+    }
+    cudaStatus = cudaDeviceSynchronize();
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "%d:: cudaDeviceSynchronize returned error code %d after launching kernel!\n", gpuIx, cudaStatus);
+        return cudaStatus;
+    }
+    return cudaStatus;
+}
+
 cudaError_t processCudaUnified() {
     cudaError_t cudaStatus;
     uint64_t* buffRangeStart = new uint64_t[NB64BLOCK];
     uint64_t* dev_buffRangeStart = new uint64_t[NB64BLOCK];
     uint64_t* buffStride = new uint64_t[NB64BLOCK];
 
-    const size_t RANGE_TRANSFER_SIZE = NB64BLOCK * sizeof(uint64_t);
     const int COLLECTOR_SIZE_MM = 4 * BLOCK_NUMBER * BLOCK_THREADS;
     const uint32_t expectedChecksum = IS_CHECKSUM ? CHECKSUM.GetInt32() : 0;
     uint64_t counter = 0;
@@ -183,7 +309,7 @@ cudaError_t processCudaUnified() {
 
     while (!RESULT && RANGE_START.IsLower(&RANGE_END)) {
         //launch work
-        cudaStatus = executeKernel(buffResultManaged, buffIsResultManaged, dev_buffRangeStart, expectedChecksum);
+        cudaStatus = executeKernel(buffResultManaged, buffIsResultManaged, dev_buffRangeStart, expectedChecksum, 0);
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "kernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
             goto Error;
@@ -240,21 +366,21 @@ Error:
     return cudaStatus;
 }
 
-cudaError_t executeKernel(uint32_t* _buffResultManaged, bool* _buffIsResultManaged, uint64_t* const _dev_buffRangeStart, const uint32_t _checksum) {
+cudaError_t executeKernel(uint32_t* _buffResultManaged, bool* _buffIsResultManaged, uint64_t* const _dev_buffRangeStart, const uint32_t _checksum, const int gpuIx) {
     if (COMPRESSED) {
         if (IS_CHECKSUM) {
-            kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (_buffResultManaged, _buffIsResultManaged, _dev_buffRangeStart, THREAD_STEPS, _checksum);
+            kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (gpuIx, _buffResultManaged, _buffIsResultManaged, _dev_buffRangeStart, THREAD_STEPS, _checksum);
         }
         else {
-            kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (_buffResultManaged, _buffIsResultManaged, _dev_buffRangeStart, THREAD_STEPS);
+            kernelCompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (gpuIx, _buffResultManaged, _buffIsResultManaged, _dev_buffRangeStart, THREAD_STEPS);
         }
     }
     else {
         if (IS_CHECKSUM) {
-            kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (_buffResultManaged, _buffIsResultManaged, _dev_buffRangeStart, THREAD_STEPS, _checksum);
+            kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (gpuIx, _buffResultManaged, _buffIsResultManaged, _dev_buffRangeStart, THREAD_STEPS, _checksum);
         }
         else {
-            kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (_buffResultManaged, _buffIsResultManaged, _dev_buffRangeStart, THREAD_STEPS);
+            kernelUncompressed << <BLOCK_NUMBER, BLOCK_THREADS >> > (gpuIx, _buffResultManaged, _buffIsResultManaged, _dev_buffRangeStart, THREAD_STEPS);
         }
     }
     return cudaGetLastError();
@@ -664,32 +790,59 @@ void printFooter() {
 }
 
 bool checkDevice() {
-    cudaError_t cudaStatus = cudaSetDevice(DEVICE_NR);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "device %d failed!", DEVICE_NR);
-        return false;
-    }
-    else {
-        cudaDeviceProp props;
-        cudaStatus = cudaGetDeviceProperties(&props, DEVICE_NR);
-        printf("Using GPU nr %d:\n", DEVICE_NR);
-        if (props.canMapHostMemory == 0) {
-            printf("unified memory not supported\n");
-            unifiedMemory = 0;
-        }
-        printf("%s (%2d procs)\n", props.name, props.multiProcessorCount);
-        printf("maxThreadsPerBlock: %2d\n\n", props.maxThreadsPerBlock);        
-        if (BLOCK_NUMBER == 0) {
-            BLOCK_NUMBER = props.multiProcessorCount * 8;
-        }
-        if (BLOCK_THREADS == 0) {
-            BLOCK_THREADS = (props.maxThreadsPerBlock / 8) * 5;
+    if (DEVICE_NR == -1) {
+        cudaGetDeviceCount(&nDevices);
+        //nDevices = 1;
+        for (int i = 0; i < nDevices; i++) {
+            cudaError_t cudaStatus = cudaSetDevice(i);
+            if (cudaStatus != cudaSuccess) {
+                fprintf(stderr, "device %d failed!", i);
+                return false;
+            }
+            cudaDeviceProp props;
+            cudaGetDeviceProperties(&props, i);
+            printf("Device Number: %d\n", i);
+            printf("  %s\n", props.name);
+            if (BLOCK_NUMBER == 0) {
+                BLOCK_NUMBER = props.multiProcessorCount * 4;
+            }
+            if (BLOCK_THREADS == 0) {
+                BLOCK_THREADS = props.maxThreadsPerBlock / 8 * 3;
+            }
         }
         outputSize = BLOCK_NUMBER * BLOCK_THREADS * THREAD_STEPS;
         loopStride = new Int(&STRIDE);
         loopStride.Mult(outputSize);
+        return true;
     }
-    return true;
+    else {
+        cudaError_t cudaStatus = cudaSetDevice(DEVICE_NR);
+        if (cudaStatus != cudaSuccess) {
+            fprintf(stderr, "device %d failed!", DEVICE_NR);
+            return false;
+        }
+        else {
+            cudaDeviceProp props;
+            cudaStatus = cudaGetDeviceProperties(&props, DEVICE_NR);
+            printf("Using GPU nr %d:\n", DEVICE_NR);
+            if (props.canMapHostMemory == 0) {
+                printf("unified memory not supported\n");
+                unifiedMemory = 0;
+            }
+            printf("%s (%2d procs)\n", props.name, props.multiProcessorCount);
+            printf("maxThreadsPerBlock: %2d\n\n", props.maxThreadsPerBlock);
+            if (BLOCK_NUMBER == 0) {
+                BLOCK_NUMBER = props.multiProcessorCount * 8;
+            }
+            if (BLOCK_THREADS == 0) {
+                BLOCK_THREADS = (props.maxThreadsPerBlock / 8) * 5;
+            }
+            outputSize = BLOCK_NUMBER * BLOCK_THREADS * THREAD_STEPS;
+            loopStride = new Int(&STRIDE);
+            loopStride.Mult(outputSize);
+        }
+        return true;
+    }
 }
 
 void showHelp() {    
@@ -713,7 +866,7 @@ void showHelp() {
     printf("-fresultp reportFile:    file for each WIF with correct checksum (default: %s)\n", fileResultPartial.c_str());
     printf("-fstatus statusFile:     file for periodically saved status (default: %s) \n", fileStatus.c_str());
     printf("-fstatusIntv seconds:    period between status file updates (default %d sec) \n", fileStatusInterval);
-    printf("-d deviceId:             default 0\n");
+    printf("-d deviceId:             default 0, '-d all' for all available CUDA devices\n");
     printf("-c :                     search for compressed address\n");
     printf("-u :                     search for uncompressed address (default)\n");
     printf("-b NbBlocks:             default processorCount * 8\n");
@@ -754,7 +907,12 @@ bool readArgs(int argc, char** argv) {
         }
         else if (strcmp(argv[a], "-d") == 0) {
             a++;
-            DEVICE_NR = strtol(argv[a], NULL, 10);
+            if ("all" == string(argv[a])) {
+                DEVICE_NR = -1;
+            }
+            else {
+                DEVICE_NR = strtol(argv[a], NULL, 10);
+            }
         }
         else if (strcmp(argv[a], "-c") == 0) {
             COMPRESSED = true;

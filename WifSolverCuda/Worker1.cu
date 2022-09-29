@@ -91,7 +91,7 @@ __global__ void resultCollector(bool* buffResult, uint64_t* buffCombinedResult, 
     buffCombinedResult[blockIdx.x] = 0xffffffffffff;
 }
 
-__global__ void kernelUncompressed(uint32_t* unifiedResult, bool* isResultFlag, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks, const uint32_t checksum) {
+__global__ void kernelUncompressed(const int gpuIx, uint32_t* unifiedResult, bool* isResultFlag, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks, const uint32_t checksum) {
     uint64_t _start[5];
     beu32 d_hash[8];
 
@@ -112,9 +112,9 @@ __global__ void kernelUncompressed(uint32_t* unifiedResult, bool* isResultFlag, 
         }
         _add(_start, _stride);
     }
-    summaryShared(unifiedResult, isResultFlag);
+    summaryShared(gpuIx, unifiedResult, isResultFlag);
 }
-__global__ void kernelUncompressed(uint32_t* unifiedResult, bool* isResultFlag, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks) {
+__global__ void kernelUncompressed(const int gpuIx, uint32_t* unifiedResult, bool* isResultFlag, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks) {
     uint64_t _start[5];
     beu32 d_hash[8];
 
@@ -135,12 +135,11 @@ __global__ void kernelUncompressed(uint32_t* unifiedResult, bool* isResultFlag, 
         }
         _add(_start, _stride);
     }
-    summaryShared(unifiedResult, isResultFlag);
+    summaryShared(gpuIx, unifiedResult, isResultFlag);
 }
-__global__ void kernelCompressed(uint32_t* unifiedResult, bool* isResultFlag, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks) {
+__global__ void kernelCompressed(const int gpuIx, uint32_t* unifiedResult, bool* isResultFlag, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks) {
     uint64_t _start[5];
     beu32 d_hash[8];
-
     int64_t resIx = threadIdx.x;
     int64_t tIx = (threadIdx.x + blockIdx.x * blockDim.x) * threadNumberOfChecks;
     IMult(_start, _stride, tIx);
@@ -162,9 +161,9 @@ __global__ void kernelCompressed(uint32_t* unifiedResult, bool* isResultFlag, ui
         }
         _add(_start, _stride);
     }
-    summaryShared(unifiedResult, isResultFlag);
+    summaryShared(gpuIx, unifiedResult, isResultFlag);
 }
-__global__ void kernelCompressed(uint32_t* unifiedResult, bool* isResultFlag, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks, const uint32_t checksum) {
+__global__ void kernelCompressed(const int gpuIx, uint32_t* unifiedResult, bool* isResultFlag, uint64_t* const __restrict__ buffRangeStart, const int threadNumberOfChecks, const uint32_t checksum) {
     uint64_t _start[5];
     beu32 d_hash[8];
 
@@ -189,7 +188,7 @@ __global__ void kernelCompressed(uint32_t* unifiedResult, bool* isResultFlag, ui
         }
         _add(_start, _stride);
     }
-    summaryShared(unifiedResult, isResultFlag);
+    summaryShared(gpuIx, unifiedResult, isResultFlag);
 }
 
 __device__ __inline__ void initShared() {
@@ -202,11 +201,11 @@ __device__ __inline__ void initShared() {
     }
     __syncthreads();
 }
-__device__ __inline__ void summaryShared(uint32_t* unifiedResult, bool* isResultFlag) {
+__device__ __inline__ void summaryShared(const int gpuIx, uint32_t* unifiedResult, bool* isResultFlag) {
     __syncthreads();
-    if (_blockResultFlag[0] && threadIdx.x == 0) {
-        isResultFlag[0] = true;
-        for (int i = 0, rIx = blockIdx.x; i < blockDim.x * 4; i++) {
+    if (threadIdx.x == 0 && _blockResultFlag[0]) {
+        isResultFlag[gpuIx] = true;
+        for (int i = 0, rIx = (blockIdx.x + 4*gpuIx*gridDim.x*blockDim.x); i < blockDim.x * 4; i++) {
             if (_blockResults[i] != UINT32_MAX) {
                 unifiedResult[rIx] = _blockResults[i];
                 rIx += gridDim.x;
