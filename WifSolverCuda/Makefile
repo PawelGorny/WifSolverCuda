@@ -1,7 +1,7 @@
 CXX=g++
 CXXFLAGS=-std=c++11 -m64 -mssse3 -Wno-unused-result -Wno-write-strings -O2 -I. -I$(CUDA)/include
 
-COMPUTE_CAP=86
+COMPUTE_CAP=75
 NVCC=nvcc
 CUDA_HOME=/usr/local/cuda
 CUDA_LIB=${CUDA_HOME}/lib64

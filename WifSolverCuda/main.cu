@@ -10,6 +10,7 @@
 #include <chrono>
 #include <thread>
 
+#include "lib/ctpl/ctpl_stl.h"
 #include "lib/Int.h"
 #include "lib/Math.cuh"
 #include "lib/util.h"
@@ -21,6 +22,7 @@
 using namespace std;
 
 void processCandidate(Int& toTest);
+void processCandidateThread(int id, uint64_t bit0, uint64_t bit1, uint64_t bit2, uint64_t bit3, uint64_t bit4);
 bool readArgs(int argc, char** argv);
 void showHelp();
 bool checkDevice();
@@ -82,11 +84,11 @@ bool isVerbose = false;
 
 Secp256K1* secp;
 
-
+ctpl::thread_pool pool(2);
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.6.0\n\n");
+    printf("WifSolver 0.6.1\n\n");
     printf("Use parameter '-h' for help and list of available parameters\n\n");
 
     if (argc <=1 || readArgs(argc, argv)) {
@@ -217,6 +219,10 @@ cudaError_t processCudaUnifiedMulti() {
             beginCountHashrate = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - beginCountStatus).count() >= fileStatusInterval) {
                 saveStatus();
+                while (!pool.isQueueEmpty()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                }
+                pool.clear_queue();
                 beginCountStatus = std::chrono::steady_clock::now();
             }
         }
@@ -235,7 +241,13 @@ cudaError_t processCudaUnifiedMulti() {
                         Int diff = new Int(&STRIDE);
                         diff.Mult(buffResultManaged[i]);
                         toTest.Add(&diff);
-                        processCandidate(toTest);
+                        uint64_t bitsToSet[NB64BLOCK];
+#pragma unroll NB64BLOCK
+                        for (int b = 0; b < NB64BLOCK; b++) {
+                            bitsToSet[b] = toTest.bits64[b];
+                        }
+                        pool.push(processCandidateThread, bitsToSet[0], bitsToSet[1], bitsToSet[2], bitsToSet[3], bitsToSet[4]);
+                        //processCandidate(toTest);
                         buffResultManaged[i] = UINT32_MAX;
                     }
                 }
@@ -323,6 +335,10 @@ cudaError_t processCudaUnified() {
             beginCountHashrate = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - beginCountStatus).count() >= fileStatusInterval) {
                 saveStatus();
+                while (!pool.isQueueEmpty()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                }
+                pool.clear_queue();
                 beginCountStatus = std::chrono::steady_clock::now();
             }
         }
@@ -352,7 +368,13 @@ cudaError_t processCudaUnified() {
                     Int diff = new Int(&STRIDE);
                     diff.Mult(buffResultManaged[i]);
                     toTest.Add(&diff);
-                    processCandidate(toTest);
+                    uint64_t bitsToSet[NB64BLOCK];
+#pragma unroll NB64BLOCK
+                    for (int b = 0; b < NB64BLOCK; b++) {
+                        bitsToSet[b] = toTest.bits64[b];
+                    }
+                    pool.push(processCandidateThread, bitsToSet[0], bitsToSet[1], bitsToSet[2], bitsToSet[3], bitsToSet[4]);                    
+                    //processCandidate(toTest);
                     buffResultManaged[i] = UINT32_MAX;                                        
                 }                
             }            
@@ -761,6 +783,17 @@ void processCandidate(Int &toTest) {
         fclose(keys);
     }
 }
+
+void processCandidateThread(int id, uint64_t bit0, uint64_t bit1, uint64_t bit2, uint64_t bit3, uint64_t bit4) {
+    Int* toTest;
+    toTest = new Int();
+    toTest->bits64[4] = bit4;
+    toTest->bits64[3] = bit3;   toTest->bits64[2] = bit2;
+    toTest->bits64[1] = bit1;   toTest->bits64[0] = bit0;
+    processCandidate(*toTest);
+    delete toTest;
+}
+
 
 void printConfig() {
     printf("Range start: %s\n", RANGE_START_TOTAL.GetBase16().c_str());
