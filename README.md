@@ -21,6 +21,7 @@ Usage:
      -stride hexKeyStride:    full stride calculated as 58^(most-right missing char index)
 	 -checksum hexChecksum:   decoded checksum, cannot be modified with a stride
 	 -a targetAddress:        expected address
+     -afile file:             file with target addresses (all the same type, 1.., bc..., 3...)
      -fresult resultFile:     file for final result (default: result.txt)
      -fresultp reportFile:    file for each WIF with correct checksum (default: result_partial.txt)
      -fstatus statusFile:     file for periodically saved status (default: fileStatus.txt)
@@ -87,11 +88,11 @@ Build
 -----
 Windows:
 
-Program was prepared using CUDA 11.6 - for any other version manual change in VS project config files is needed. Exe under /Releases/ was build using compute_cap=86, for cards 30xx. If you have older card, you must rebuild program using older CUDA/lower CCAP.
+Program was prepared using CUDA 11.8 - for any other version manual change in VS project config files is needed. Exe under /Releases/ was build using compute_cap=86, for cards 30xx. If you have older card, you must rebuild program using older CUDA/lower CCAP.
 
 Linux:
 
-Go to WifSolverCuda/ subfolder and execute _make all_. If your device does not support compute capability=86 (error "No kernel image is available for execution on the device"), do the change in _Makefile_ (for example 1080Ti requires COMPUTE_CAP=61).
+Go to WifSolverCuda/ subfolder and execute _make all_. If your device does not support compute capability=75 (error "No kernel image is available for execution on the device"), do the change in _Makefile_ (for example 1080Ti requires COMPUTE_CAP=61).
 
 
 Performance
@@ -102,12 +103,13 @@ Test card: RTX3060 (eGPU!) with 224 BLOCKS & 640 BLOCK_THREADS (program default 
 
 | card          | perf Mkey/s, missing beginning
 |---------------|---------------------|
+| GTX 1070      | 950  (135/768/5000) |
+| RTX 2080TI    | 2900 (544/640/5000) |
 | RTX 3060 eGPU | 1400 (224/512/20000)|
 | RTX 3070      | 2200 (414/640/5000) |
 | RTX 3090      | 3950 (656/640/5000) |
 | RTX 3080TI    | 4000 (640/640/5000) |
 | RTX A6000     | 4000 (588/640/5000) |
-| GTX 1070      | 950  (135/768/5000) |
 
 Please consult official Nvidia Occupancy Calculator (https://docs.nvidia.com/cuda/cuda-occupancy-calculator/index.html) to see how to select desired amount of threads/block (shared memory=0, registers per thread = 48). Adjust number of steps per thread to obtain the optimal performance.
        

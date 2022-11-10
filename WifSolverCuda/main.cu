@@ -5,10 +5,12 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <iostream>
-#include <iomanip>
+#include <fstream>
 #include <sstream>
+#include <iomanip>
 #include <chrono>
 #include <thread>
+#include <set>
 
 #include "lib/ctpl/ctpl_stl.h"
 #include "lib/Int.h"
@@ -24,6 +26,7 @@ using namespace std;
 void processCandidate(Int& toTest);
 void processCandidateThread(int id, uint64_t bit0, uint64_t bit1, uint64_t bit2, uint64_t bit3, uint64_t bit4);
 bool readArgs(int argc, char** argv);
+bool readFileAddress(const std::string& file_name);
 void showHelp();
 bool checkDevice();
 void listDevices();
@@ -57,7 +60,12 @@ Int STRIDE, RANGE_START, RANGE_END, RANGE_START_TOTAL, RANGE_TOTAL;
 double RANGE_TOTAL_DOUBLE;
 Int loopStride;
 Int counter;
-string TARGET_ADDRESS = "";
+
+bool IS_TARGET_ADDRESS = false;
+bool IS_TARGET_ADDRESS_SINGLE = false;
+set<string>addresses;
+unsigned int addressesLen = 0;
+
 Int CHECKSUM;
 bool IS_CHECKSUM = false;
 
@@ -80,7 +88,7 @@ bool showDevices = false;
 bool p2sh = false;
 bool bech32 = false;
 
-bool isVerbose = false;
+bool IS_VERBOSE = false;
 
 Secp256K1* secp;
 
@@ -88,7 +96,7 @@ ctpl::thread_pool pool(2);
 
 int main(int argc, char** argv)
 {    
-    printf("WifSolver 0.6.1\n\n");
+    printf("WifSolver 0.6.2\n\n");
     printf("Use parameter '-h' for help and list of available parameters\n\n");
 
     if (argc <=1 || readArgs(argc, argv)) {
@@ -602,7 +610,9 @@ void restoreSettings(string fileStatusRestore) {
         }
         prefix = string("-a=");
         if (s.rfind(prefix, 0) == 0) {
-            TARGET_ADDRESS = s.substr(prefix.size(), s.size() - prefix.size() - 1);
+            addresses.insert(s.substr(prefix.size(), s.size() - prefix.size() - 1));
+            IS_TARGET_ADDRESS_SINGLE = true;
+            IS_TARGET_ADDRESS = true;
             continue;
         }
         prefix = string("-b=");
@@ -662,11 +672,9 @@ void saveStatus() {
     fprintf(stat, "-rangeStartInit=%s\n", RANGE_START_TOTAL.GetBase16().c_str());
     fprintf(stat, "-rangeStart=%s\n", RANGE_START.GetBase16().c_str());
     fprintf(stat, "-rangeEnd=%s\n", RANGE_END.GetBase16().c_str());
-    fprintf(stat, "-stride=%s\n", STRIDE.GetBase16().c_str());
-    if (!TARGET_ADDRESS.empty()) {
-        fprintf(stat, "-a=%s\n", TARGET_ADDRESS.c_str());
-    }else {
-        fprintf(stat, "-a=\n");
+    fprintf(stat, "-stride=%s\n", STRIDE.GetBase16().c_str());    
+    if (IS_TARGET_ADDRESS_SINGLE) {
+        fprintf(stat, "-a=%s\n", (* (addresses.begin())).c_str() );
     }
     if (IS_CHECKSUM) {
         fprintf(stat, "-checksum=%s\n", CHECKSUM.GetBase16().c_str());
@@ -710,7 +718,7 @@ void printSpeed(double speed) {
     double _count = processedCount.ToDouble(); 
     _count = _count / RANGE_TOTAL_DOUBLE;
     _count *= 100;
-    if (isVerbose) {
+    if (IS_VERBOSE) {
         char wif[53];
         unsigned char* buff = new unsigned char[dataLen];
         for (int i = 0, d = dataLen - 1; i < dataLen; i++, d--) {
@@ -752,8 +760,8 @@ void processCandidate(Int &toTest) {
         }
         addressToBase58(rmdhash, address, p2sh);
     }   
-    if (!TARGET_ADDRESS.empty()) {
-        if (TARGET_ADDRESS == address) {
+    if (IS_TARGET_ADDRESS) {
+        if (addresses.find(address) != addresses.end()) {
             RESULT = true;            
             printf("\n");
             printf("found: %s\n", address);
@@ -794,7 +802,6 @@ void processCandidateThread(int id, uint64_t bit0, uint64_t bit1, uint64_t bit2,
     delete toTest;
 }
 
-
 void printConfig() {
     printf("Range start: %s\n", RANGE_START_TOTAL.GetBase16().c_str());
     printf("Range end  : %s\n", RANGE_END.GetBase16().c_str());
@@ -802,8 +809,11 @@ void printConfig() {
     if (IS_CHECKSUM) {
         printf("Checksum   : %s\n", CHECKSUM.GetBase16().c_str());
     }
-    if (!TARGET_ADDRESS.empty()) {
-        printf( "Target     : %s\n", TARGET_ADDRESS.c_str());
+    if (IS_TARGET_ADDRESS_SINGLE) {
+        printf("Target     : %s\n", (*(addresses.begin())).c_str());
+    }
+    else {
+        printf("Targets    : %d\n", addressesLen);
     }
     if (COMPRESSED) {
         printf("Target COMPRESSED\n");
@@ -878,7 +888,7 @@ bool checkDevice() {
     }
 }
 
-void showHelp() {    
+void showHelp()  {    
     printf("WifSolverCuda [-d deviceId] [-b NbBlocks] [-t NbThreads] [-s NbThreadChecks]\n");
     printf("    [-fresultp reportFile] [-fresult resultFile] [-fstatus statusFile] [-a targetAddress]\n");
     printf("    -stride hexKeyStride -rangeStart hexKeyStart [-rangeEnd hexKeyEnd] [-checksum hexChecksum] \n");
@@ -895,6 +905,7 @@ void showHelp() {
     printf("-checksum hexChecksum:   decoded checksum, cannot be modified with a stride  \n");
     printf("-stride hexKeyStride:    full stride calculated as 58^(most-right missing char index) \n");
     printf("-a targetAddress:        expected address\n");
+    printf("-afile file:             file with target addresses (all the same type, 1.., bc..., 3...)\n");
     printf("-fresult resultFile:     file for final result (default: %s)\n", fileResult.c_str());
     printf("-fresultp reportFile:    file for each WIF with correct checksum (default: %s)\n", fileResultPartial.c_str());
     printf("-fstatus statusFile:     file for periodically saved status (default: %s) \n", fileStatus.c_str());
@@ -1029,9 +1040,20 @@ bool readArgs(int argc, char** argv) {
             a++;
             fileStatusInterval = strtol(argv[a], NULL, 10);
         }
+        else if (strcmp(argv[a], "-afile") == 0) {
+            a++;            
+            if (!readFileAddress(string(argv[a]))) {
+                return true;
+            }
+            IS_TARGET_ADDRESS = true;
+            IS_TARGET_ADDRESS_SINGLE = (addressesLen == 1);
+        }
         else if (strcmp(argv[a], "-a") == 0) {
             a++;
-            TARGET_ADDRESS = string(argv[a]);
+            IS_TARGET_ADDRESS = true;
+            IS_TARGET_ADDRESS_SINGLE = true;
+            addressesLen = 1;
+            addresses.insert(string(argv[a]));
             if (argv[a][0] == '3') {
                 p2sh = true;
                 COMPRESSED = true;
@@ -1051,7 +1073,7 @@ bool readArgs(int argc, char** argv) {
             printf("unified memory mode disabled\n");
         }
         else if (strcmp(argv[a], "-v") == 0) {
-        isVerbose = true;
+        IS_VERBOSE = true;
         }
         a++;
     }    
@@ -1112,4 +1134,38 @@ void listDevices() {
         printf("  maxThreadsPerBlock: %2d\n", prop.maxThreadsPerBlock);
         printf("  version majorminor: %d%d\n\n", prop.major, prop.minor);
     }
+}
+
+bool readFileAddress(const std::string& file_name) {
+    std::ifstream stream(file_name);
+    if (IS_VERBOSE) {
+        std::cout << "Opening address file '" << file_name << "'" << std::endl;
+    }
+    if (stream.fail() || !stream.good())
+    {
+        std::cout << "Error: Failed to open file '" << file_name << "'" << std::endl;
+        return false;
+    }
+    std::string buffer;
+    int nr = 0;
+    while (!stream.eof() && stream.good() && stream.peek() != EOF)
+    {
+        std::getline(stream, buffer);
+        addresses.insert(buffer);
+        if (0 == nr) {
+            if (buffer[0] == '3') {
+                p2sh = true;
+                COMPRESSED = true;
+            }
+            else
+                if (buffer[0] == 'b') {
+                    bech32 = true;
+                    COMPRESSED = true;
+                }
+        }
+        nr++;
+    }
+    stream.close();
+    addressesLen = nr;
+    return true;
 }
